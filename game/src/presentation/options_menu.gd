@@ -34,6 +34,7 @@ func label_for(key: String) -> String:
 	return {
 		"aim_assist": "Aim assistance", "linked_fire": "Fire linked weapons",
 		"touch": "Show touch controls", "sensitivity": "Mouse sensitivity",
+		"fullscreen": "Fullscreen", "aspect_ratio": "Aspect ratio",
 		"help": library.text(int(data.labels.help))
 	}.get(key, key)
 
@@ -45,11 +46,17 @@ func show_section(page: String, focus_key: String = "") -> void:
 		"options": ["controls", "audio", "display"],
 		"controls": ["invert", "sensitivity", "aim_assist", "linked_fire", "help"],
 		"audio": ["effects_volume", "music_volume"],
-		"display": ["targeting_reticle", "touch"], "help": []
+		"display": ["fullscreen", "aspect_ratio", "targeting_reticle", "touch"], "help": []
 	}.get(page, [])
+	if preload("res://src/presentation/bitmap_font.gd").is_mobile():
+		keys.erase("fullscreen")
 	for key in keys:
 		var caption_key: String = {"music_volume": "music", "effects_volume": "effects"}.get(key, key)
-		entries.append({"action": key, "text": label_for(caption_key)})
+		var caption := label_for(caption_key)
+		if key == "aspect_ratio":
+			var ratio: String = values.get(key, "auto")
+			caption += ": " + ("Auto" if ratio == "auto" else ratio)
+		entries.append({"action": key, "text": caption})
 	present(page, entries, library.text(int(library.content.briefing_ui.labels.back)), "back", help_text if page == "help" else "")
 	# Original sliders are taller than ordinary rows. Native extra settings must
 	# fit between the logo and footer without overlapping their neighbours.
@@ -173,6 +180,11 @@ func handle_action(action: String) -> void:
 		back()
 	elif action in ["controls", "audio", "display", "help"]:
 		show_section(action)
+	elif action == "aspect_ratio":
+		var ratios: Array = preload("res://src/presentation/display_settings.gd").RATIOS.keys()
+		values[action] = ratios[(ratios.find(values.get(action, "auto")) + 1) % ratios.size()]
+		setting_changed.emit(action, values[action])
+		show_section(section, action)
 	elif values.get(action) is bool:
 		values[action] = not values[action]
 		setting_changed.emit(action, values[action])

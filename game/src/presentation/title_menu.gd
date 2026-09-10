@@ -201,6 +201,10 @@ func present(
 
 func make_button(text: String, action: String, idle: Texture2D, selected: Texture2D) -> Button:
 	var result := Button.new()
+	if OS.has_feature("web") and action in ["resume", "load_campaign", "load_free", "fullscreen"]:
+		# Browser pointer lock/fullscreen require the press that activates the
+		# control, rather than a later release or deferred scene transition.
+		result.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	result.text = text
 	result.add_theme_font_override("font", font)
 	var text_width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, int(font.get_meta("source_height"))).x

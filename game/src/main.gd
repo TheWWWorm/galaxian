@@ -8,6 +8,7 @@ const BriefingScene = preload("res://src/presentation/briefing_scene.gd")
 const RecoveryPanel = preload("res://src/presentation/recovery.gd")
 const Dialogue = preload("res://src/presentation/dialogue.gd")
 const HUD = preload("res://src/presentation/hud.gd")
+const DisplaySettings = preload("res://src/presentation/display_settings.gd")
 const GalaxyMap = preload("res://src/presentation/galaxy_map.gd")
 const SurvivalArchive = preload("res://src/simulation/survival_archive.gd")
 const SurvivalMenu = preload("res://src/presentation/survival_menu.gd")
@@ -70,7 +71,9 @@ var settings := {
 	"music_volume": 1.0,
 	"effects_volume": 1.0,
 	"touch": false,
-	"linked_fire": false
+	"linked_fire": false,
+	"fullscreen": false,
+	"aspect_ratio": "auto"
 }
 var notification_text := ""
 var notification_time := 0.0
@@ -99,6 +102,11 @@ func _ready() -> void:
 	setup_world()
 	setup_ui()
 	load_settings()
+	DisplaySettings.apply_aspect(get_window(), str(settings.aspect_ratio))
+	# Browsers require a fresh gesture to enter fullscreen; restore only native windows.
+	if not OS.has_feature("web") and not preload("res://src/presentation/bitmap_font.gd").is_mobile():
+		DisplaySettings.set_fullscreen(get_window(), bool(settings.fullscreen))
+	settings.fullscreen = DisplaySettings.fullscreen(get_window())
 	apply_audio_settings()
 	importer.progress.connect(import_progress)
 	get_window().files_dropped.connect(files_dropped)
@@ -162,7 +170,7 @@ func setup_ui() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(spacer)
-	top.add_child(label("NATIVE REMAKE  /  1.0.0", 12, Color("91a7b8")))
+	top.add_child(label("NATIVE REMAKE  /  1.0.1", 12, Color("91a7b8")))
 	ui.add_child(status)
 	status.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	status.offset_left = 48
@@ -1370,13 +1378,7 @@ func navigate_back() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_F11:
-			DisplayServer.window_set_mode(
-				(
-					DisplayServer.WINDOW_MODE_WINDOWED
-					if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-					else DisplayServer.WINDOW_MODE_FULLSCREEN
-				)
-			)
+			change_option("fullscreen", not DisplaySettings.fullscreen(get_window()))
 		elif event.physical_keycode == KEY_ESCAPE:
 			navigate_back()
 		elif event.physical_keycode == KEY_F5:
@@ -1560,6 +1562,7 @@ func hangar_transaction(action: String, entry: Dictionary) -> void:
 
 
 func show_options() -> void:
+	settings.fullscreen = DisplaySettings.fullscreen(get_window())
 	var section: String = options_panel.section if is_instance_valid(options_panel) else "options"
 	if screen != "options":
 		options_return_screen = screen
@@ -1645,7 +1648,13 @@ func close_options() -> void:
 
 
 func change_option(key: String, value: Variant) -> void:
-	if key in ["music_volume", "effects_volume", "sensitivity"]:
+	if key == "fullscreen" and value is bool:
+		DisplaySettings.set_fullscreen(get_window(), value)
+		settings.fullscreen = value
+	elif key == "aspect_ratio" and value is String and DisplaySettings.RATIOS.has(value):
+		settings.aspect_ratio = value
+		DisplaySettings.apply_aspect(get_window(), value)
+	elif key in ["music_volume", "effects_volume", "sensitivity"]:
 		if not value is float and not value is int: return
 		if not is_finite(float(value)): return
 		settings[key] = clampf(float(value), .0005, .008) if key == "sensitivity" else clampf(float(value), 0, 1)
@@ -1748,6 +1757,13 @@ func notify(message: String) -> void:
 
 
 func _process(delta: float) -> void:
+	# Browser Escape and the window manager can exit fullscreen independently.
+	if is_instance_valid(options_panel) and screen == "options" and options_panel.section == "display":
+		var fullscreen_now := DisplaySettings.fullscreen(get_window())
+		if options_panel.values.get("fullscreen", false) != fullscreen_now:
+			settings.fullscreen = fullscreen_now
+			options_panel.values.fullscreen = fullscreen_now
+			options_panel.show_section("display", "fullscreen")
 	record_play_time(delta, get_window().has_focus())
 	if flight != null and screen in ["defeat", "survival_result", "survival_name"]:
 		flight.advance_defeat_presentation(delta)

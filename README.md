@@ -92,6 +92,11 @@ primary firing and separate music/effects volume. On touchscreens, use the joyst
 or drag empty flight space to steer. Android Back pauses/resumes flight or returns
 from a menu. Full key remapping is not implemented.
 
+Under **Options → Display**, toggle **Fullscreen** or choose an **Aspect ratio**.
+**Auto** fills your browser or resizable window; fixed ratios preserve the picture
+with borders where needed. F11 also toggles fullscreen. If your browser releases
+the mouse, click the flight view to capture it again.
+
 ## Saves and updates
 
 Each IPA has a separate content identity, cache and saves. Campaign, exploration

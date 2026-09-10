@@ -63,6 +63,7 @@ var intro_stage := -1
 var rng := RandomNumberGenerator.new()
 var settings := {"sensitivity": .0025, "invert": false, "aim_assist": true}
 var audio := preload("res://src/presentation/audio_settings.gd").effect_player()
+var capture_button_held := false
 var laser_sound: AudioStreamWAV
 var ambience := Node3D.new()
 var checkpoint_elapsed := 0.0
@@ -200,6 +201,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	controls.accept(event)
 	if paused or cinematic_locked():
 		return
+	if (
+		OS.has_feature("web") and event is InputEventMouseButton
+		and event.button_index == MOUSE_BUTTON_LEFT and event.pressed
+		and event.device != InputEvent.DEVICE_ID_EMULATION
+		and not settings.get("touch", false)
+		and not mouse_is_captured()
+	):
+		# Escape can release browser pointer lock independently of the game.
+		# A fresh click in flight must always be able to acquire it again.
+		capture_mouse()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		ship.rotate_y(-event.relative.x * float(settings.sensitivity))
 		ship.rotate_object_local(
@@ -225,11 +238,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				first_person = not first_person
 				ship.visible = not first_person
 			KEY_TAB:
-				Input.mouse_mode = (
-					Input.MOUSE_MODE_VISIBLE
-					if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
-					else Input.MOUSE_MODE_CAPTURED
-				)
+				if mouse_is_captured(): Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+				else: capture_mouse()
 	if event is InputEventJoypadButton and event.pressed:
 		match event.button_index:
 			JOY_BUTTON_X:
@@ -301,6 +311,7 @@ func try_dock() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT): capture_button_held = false
 	if library == null or paused:
 		return
 	if danger():
@@ -447,6 +458,7 @@ func step(dt: float) -> void:
 			(
 				Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 				and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+				and not capture_button_held
 			)
 			or Input.is_physical_key_pressed(KEY_SPACE)
 			or pad.fire
@@ -1216,7 +1228,24 @@ func pause(value: bool) -> void:
 	paused = value
 	controls.clear()
 	time_factor = 1
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if value else Input.MOUSE_MODE_CAPTURED
+	if value or settings.get("touch", false):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	else:
+		capture_mouse()
+
+
+func mouse_is_captured() -> bool:
+	if OS.has_feature("web"):
+		# The browser may revoke/reject lock while Godot still remembers Captured.
+		return bool(JavaScriptBridge.eval("document.pointerLockElement !== null"))
+	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+
+
+func capture_mouse() -> void:
+	if OS.has_feature("web"):
+		capture_button_held = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _exit_tree() -> void:

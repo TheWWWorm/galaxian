@@ -64,7 +64,8 @@ func _draw() -> void:
 	var factor := composition_scale()
 	draw_set_transform(origin, 0, Vector2.ONE * factor)
 	var panel := Rect2(layout.panel[0], layout.panel[1], layout.panel[2], layout.panel[3])
-	var line_height: float = library.radio_glyphs().values()[0].size.y
+	var metrics := text_metrics()
+	var line_height := metrics.x
 	var extra := maxf(0, lines.size() * line_height + 20 - panel.size.y)
 	panel.position.y -= extra
 	panel.size.y += extra
@@ -75,11 +76,9 @@ func _draw() -> void:
 		if not cue.left:
 			position.x -= portrait.get_width()
 		draw_texture(portrait, position)
-	var pen := Vector2(layout.text_origin[0], layout.text_origin[1] - extra)
+	var pen := Vector2(layout.text_origin[0], panel.position.y + (panel.size.y - lines.size() * line_height) * .5 + metrics.y)
 	if portrait != null and cue.left:
 		pen.x += portrait.get_width()
-	if lines.size() > 4:
-		pen.y -= line_height * .5
 	for line in lines:
 		draw_bitmap(line, pen)
 		pen.y += line_height
@@ -112,13 +111,22 @@ func _draw() -> void:
 		var text: String = library.text(label_id)
 		var offset: float = 0 if center else (4 if index == 0 else -4)
 		draw_bitmap(
-			text, Vector2(x + (rect.size.x - bitmap_width(text)) * .5 + offset, footer.y + 9)
+			text, Vector2(x + (rect.size.x - bitmap_width(text)) * .5 + offset, footer.y + (rect.size.y - line_height) * .5 + metrics.y)
 		)
 	draw_set_transform(Vector2.ZERO)
 
 
 func bitmap_width(text: String) -> float:
 	return preload("res://src/presentation/bitmap_font.gd").text_width(library, text)
+
+
+func text_metrics() -> Vector2:
+	var source_height: int = library.radio_glyphs().values()[0].size.y
+	if preload("res://src/presentation/bitmap_font.gd").is_mobile():
+		return Vector2(source_height, 0)
+	var font := ThemeDB.fallback_font
+	# draw_text adds the source glyph height to its supplied baseline origin.
+	return Vector2(font.get_height(source_height), font.get_ascent(source_height) - source_height)
 
 func draw_bitmap(text: String, position: Vector2) -> void:
 	preload("res://src/presentation/bitmap_font.gd").draw_text(self, library, text, position)

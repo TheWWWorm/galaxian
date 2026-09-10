@@ -3,7 +3,7 @@ config_version=5
 [application]
 config/name="Galaxy on Fire — Native Remake"
 config/icon="res://icon.svg"
-config/version="1.0.0"
+config/version="1.0.1"
 run/main_scene="res://scenes/main.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="gof1-remake"
@@ -18,6 +18,7 @@ window/size/window_height_override=800
 window/size/min_width=960
 window/size/min_height=640
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 window/handheld/orientation=0
 
 [rendering]

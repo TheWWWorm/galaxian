@@ -17,6 +17,9 @@ static func ensure_buses() -> void:
 static func effect_player() -> AudioStreamPlayer:
 	ensure_buses()
 	var player := AudioStreamPlayer.new()
+	# Runtime buses on Web's Sample backend can disconnect Master. Use the
+	# threaded Godot mixer for imported music and effects on every platform.
+	player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	player.bus = EFFECTS
 	return player
 
@@ -24,6 +27,7 @@ static func effect_player() -> AudioStreamPlayer:
 static func music_player() -> AudioStreamPlayer:
 	ensure_buses()
 	var player := AudioStreamPlayer.new()
+	player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	player.bus = MUSIC
 	return player
 
