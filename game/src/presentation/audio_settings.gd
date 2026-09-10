@@ -8,8 +8,13 @@ static func ensure_buses() -> void:
 	for name in [MUSIC, EFFECTS]:
 		if AudioServer.get_bus_index(name) >= 0:
 			continue
-		AudioServer.add_bus()
-		var index := AudioServer.bus_count - 1
+		var index := AudioServer.bus_count
+		if OS.has_feature("web"):
+			# add_bus normalizes append indices to -1, which reorders Web
+			# sample buses in Godot 4.7. Growing the count preserves their order.
+			AudioServer.bus_count = index + 1
+		else:
+			AudioServer.add_bus()
 		AudioServer.set_bus_name(index, name)
 		AudioServer.set_bus_send(index, "Master")
 
@@ -17,9 +22,11 @@ static func ensure_buses() -> void:
 static func effect_player() -> AudioStreamPlayer:
 	ensure_buses()
 	var player := AudioStreamPlayer.new()
-	# Runtime buses on Web's Sample backend can disconnect Master. Use the
-	# threaded Godot mixer for imported music and effects on every platform.
-	player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	# Short effects need immediate browser playback; native audio is unchanged.
+	player.playback_type = (
+		AudioServer.PLAYBACK_TYPE_SAMPLE if OS.has_feature("web")
+		else AudioServer.PLAYBACK_TYPE_STREAM
+	)
 	player.bus = EFFECTS
 	return player
 

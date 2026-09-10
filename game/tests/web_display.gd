@@ -61,7 +61,8 @@ func run():
 		for button in options.buttons:
 			check(button.get_rect().end.y < options.footer.position.y, "Display rows clear footer")
 	var fx := Audio.effect_player(); var music := Audio.music_player()
-	check(fx.playback_type == AudioServer.PLAYBACK_TYPE_STREAM and music.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Music and effects use the native mixer, including Web")
+	var expected_effect := AudioServer.PLAYBACK_TYPE_SAMPLE if OS.has_feature("web") else AudioServer.PLAYBACK_TYPE_STREAM
+	check(fx.playback_type == expected_effect and music.playback_type == AudioServer.PLAYBACK_TYPE_STREAM, "Web effects use low-latency samples; native audio and music retain streams")
 	check(fx.bus == Audio.EFFECTS and music.bus == Audio.MUSIC, "Independent imported audio volume buses retained")
 	fx.free(); music.free()
 	var flight := preload("res://src/presentation/flight.gd").new()
