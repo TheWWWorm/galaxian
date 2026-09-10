@@ -17,6 +17,12 @@ const Steering = preload("res://src/simulation/player_steering.gd")
 var mouse_motion := Vector2.ZERO
 var player_hull_rest := Basis.IDENTITY
 var displayed_bank := Vector3.ZERO
+var chase_camera_active := false
+const ShipTrails = preload("res://src/presentation/ship_trails.gd")
+const FlightEffects = preload("res://src/presentation/flight_effects.gd")
+var flight_effects := FlightEffects.new()
+var boost_audio := preload("res://src/presentation/audio_settings.gd").effect_player()
+var player_burner := preload("res://src/presentation/npc_exhaust.gd").new()
 var player_hull: MeshInstance3D
 var camera := Camera3D.new()
 var station
@@ -98,14 +104,23 @@ func setup(data, state, options: Dictionary, resume: bool = false) -> void:
 	library.attach_ship_exhaust(
 		hull, int(library.content.tables.buyable_ships[session.ship_id]), true
 	)
+	add_child(player_burner)
+	player_burner.configure(library.content.npc_exhaust, hull)
+	if boosting():
+		player_burner.advance_active(boost_elapsed(), true)
 	update_player_exhaust(speed)
+	add_child(flight_effects)
+	flight_effects.configure(library)
+	add_child(boost_audio)
+	boost_audio.stream = library.sound_clip(int(library.content.flight_effects.boost_sound))
+	boost_audio.volume_linear = float(library.content.sound_bank[str(int(library.content.flight_effects.boost_sound))].gain)
 	ship.position = session.Mission.SPAWN_POSITION
 	if resume and session.flight_position != Vector3.ZERO:
 		ship.position = session.flight_position
 		ship.rotation = session.flight_rotation
 	add_child(camera)
 	camera.current = true
-	camera.fov = 70
+	camera.fov = FlightEffects.field_of_view(library.content.flight_effects, boost_elapsed(), boosting())
 	camera.far = 45000
 	# Mission geometry comes from its imported actors, fields and fog. The
 	# exploration area must not inject scenery or obstacles into a mission.
@@ -150,21 +165,24 @@ func setup(data, state, options: Dictionary, resume: bool = false) -> void:
 	sync_projectiles()
 
 
-func update_player_exhaust(forward_speed: float) -> void:
-	if not is_instance_valid(player_hull):
-		return
-	# Modern variable throttle: preserve imported nozzle geometry at cruise, then
-	# shorten/narrow it with forward travel. Sideways motion does not power rear
-	# engines, and time acceleration does not add thrust.
-	var cruise: float = library.content.player_motion.cruise_speed
-	var ratio := clampf(forward_speed / cruise, 0.0, 1.0)
-	for nozzle in player_hull.get_children():
-		if not nozzle.has_meta("exhaust_scale"):
-			continue
+func boosting() -> bool:
+	return not player_destroyed and session.motion.boost_remaining > 0
+
+
+func boost_elapsed() -> float:
+	return maxf(0, float(library.content.player_motion.boost_seconds) - float(session.motion.boost_remaining))
+
+
+func update_player_exhaust(forward_speed: float, seconds: float = 0.0) -> void:
+	if not is_instance_valid(player_hull): return
+	player_burner.advance_active(seconds, boosting())
+	player_burner.sync()
+	# Variable throttle remains a native option; boost uses the shared source
+	# burner envelope with the player's explicit boost flag, independent of speed.
+	var ratio := clampf(forward_speed / float(library.content.player_motion.cruise_speed), 0.0, 1.0)
+	for nozzle in player_burner.nozzles:
 		nozzle.visible = ratio > 0.0
-		if ratio > 0.0:
-			var base: Vector3 = nozzle.get_meta("exhaust_scale")
-			nozzle.scale = base * Vector3(sqrt(ratio), sqrt(ratio), ratio)
+		nozzle.scale *= Vector3(sqrt(ratio), sqrt(ratio), ratio)
 
 
 func build_station_area() -> void:
@@ -307,7 +325,18 @@ func update_player_bank(seconds: float = 0.0) -> void:
 	# Native presentation filtering prevents sparse mouse packets from snapping the
 	# hull between banking angles. This never alters the actual flight/aim frame.
 	displayed_bank = displayed_bank.lerp(target, 1.0 - exp(-seconds / .06)) if seconds > 0 and original_controls() else target
-	player_hull.basis = Basis.from_euler(displayed_bank) * player_hull_rest
+	update_player_hull_frame()
+
+
+func update_player_hull_frame() -> void:
+	if not is_instance_valid(player_hull): return
+	var frame := Basis.IDENTITY
+	if original_controls() and chase_camera_active and not first_person:
+		# Keep the visible hull's heading aligned with the chase camera. The
+		# logical ship still owns navigation, collision, aim and saved orientation.
+		# Only the cosmetic bank/pitch is visible relative to the camera.
+		frame = ship.global_basis.inverse() * camera.global_basis
+	player_hull.basis = frame * Basis.from_euler(displayed_bank) * player_hull_rest
 
 
 func cinematic_locked() -> bool:
@@ -495,9 +524,12 @@ func step(dt: float) -> void:
 		var boost_down: bool = (
 			Input.is_physical_key_pressed(KEY_SHIFT) or pad.boost or controls.touch_boost
 		)
+		var start_boost: bool = boost_down and not boost_held and session.motion.boost_remaining <= 0 and session.motion.cooldown <= 0
 		var movement: Dictionary = session.Motion.advance(
-			session.motion, library.content.player_motion, dt, boost_down and not boost_held
+			session.motion, library.content.player_motion, dt, start_boost
 		)
+		if start_boost:
+			boost_audio.play()
 		boost_held = boost_down
 		var travel := (
 			Vector3(
@@ -596,7 +628,9 @@ func step(dt: float) -> void:
 				hit(float(contact.damage), contact.normal)
 				if paused:
 					return
-	update_player_exhaust(forward_travel / dt)
+	update_player_exhaust(forward_travel / dt, 0.0 if frozen else dt)
+	if not frozen:
+		flight_effects.advance(dt, ship.global_transform, boosting(), FlightEffects.percentage(library.content.flight_effects, boost_elapsed()))
 	spawn_targets()
 	for actor in actors:
 		if not is_instance_valid(actor.node):
@@ -614,6 +648,8 @@ func step(dt: float) -> void:
 			"source_scale", false
 		):
 			node.rotate_y(dt * .16)
+		if not frozen and node.has_meta("ship_trails"):
+			node.get_meta("ship_trails").advance(dt, node.global_transform)
 	advance_projectiles(dt, previous_player)
 	if paused:
 		return
@@ -661,7 +697,9 @@ func hit(amount: float, incoming: Vector3 = Vector3.ZERO) -> void:
 	var absorbed := minf(session.shield, amount)
 	session.shield -= absorbed
 	session.hull -= amount - absorbed
-	player_hit.flash(session.shield, ship.global_transform)
+	player_hit.flash(session.shield, ship.global_transform, incoming)
+	if session.hull > 0:
+		player_hit.start_shake()
 	if session.hull <= 0:
 		lose_ship()
 
@@ -988,6 +1026,13 @@ func actor_visual(definition: Dictionary, state: Dictionary) -> Node3D:
 	if state.has("heading"):
 		var heading: Vector3 = session.Combat.vector(state.heading)
 		node.basis = session.Mission.Frame.axes(heading, session.Combat.vector(state.up))
+	if state.has("fighter_motion") and group.get("render_mesh", true):
+		var declaration := ShipTrails.declarations(library.content.flight_effects.trails, int(group.actor), session.Mission.enemy(definition, state), int(session.active_job.get("chapter", -1)), int(state.get("archetype", -1)))
+		if not declaration.is_empty():
+			var trail := ShipTrails.new(); node.add_child(trail)
+			trail.configure(library, declaration, node.global_transform)
+			node.set_meta("ship_trails", trail)
+
 	return node
 
 
@@ -1229,6 +1274,8 @@ func objective() -> String:
 
 
 func update_camera(dt: float) -> void:
+	player_hit.restore_camera(camera)
+	camera.fov = FlightEffects.field_of_view(library.content.flight_effects, boost_elapsed(), boosting())
 	var direction: Dictionary = session.Mission.Sequence.directives(
 		session.mission_definition(), session.active_job
 	)
@@ -1240,6 +1287,7 @@ func update_camera(dt: float) -> void:
 			or session.Mission.point(focus.get("offset", [0, 0, 0])).length_squared() > 0
 		)
 	):
+		chase_camera_active = false
 		var position: Vector3 = (
 			session.Combat.vector(session.active_job.actors[int(focus.actor)].position)
 			if int(focus.actor) >= 0
@@ -1276,9 +1324,11 @@ func update_camera(dt: float) -> void:
 					else Vector3.UP
 				)
 			)
+		update_player_hull_frame()
 		if backdrop != null:
 			backdrop.follow(camera)
 		return
+	chase_camera_active = true
 	var desired := (
 		ship.position
 		if first_person
@@ -1293,6 +1343,8 @@ func update_camera(dt: float) -> void:
 		camera.position = camera.position.lerp(desired, minf(dt * 8, 1))
 		camera.basis = camera.basis.slerp(ship.basis, minf(dt * 10, 1)).orthonormalized()
 
+	update_player_hull_frame()
+	player_hit.shake_camera(camera, dt, follow_distance)
 	if backdrop != null:
 		backdrop.follow(camera)
 
@@ -1300,6 +1352,7 @@ func update_camera(dt: float) -> void:
 func pause(value: bool) -> void:
 	mouse_motion = Vector2.ZERO
 	paused = value
+	boost_audio.stream_paused = value
 	controls.clear()
 	time_factor = 1
 	if value or settings.get("touch", false):
@@ -1384,6 +1437,9 @@ func sync_fields() -> void:
 
 
 func actor_destroyed(actor: Dictionary, restored: bool = false) -> void:
+	if actor.node.has_meta("ship_trails"):
+		actor.node.get_meta("ship_trails").queue_free()
+		actor.node.remove_meta("ship_trails")
 	var effect = preload("res://src/presentation/explosion.gd").new()
 	add_child(effect)
 	var clock: Dictionary = actor.get("state", {}).get("destruction", {})
@@ -1462,6 +1518,9 @@ func lose_ship() -> void:
 	if player_destroyed:
 		return
 	player_destroyed = true
+	player_hit.clear_flash()
+	player_hit.restore_camera(camera)
+	player_hit.shake_remaining = 0
 	session.hull = 0
 	paused = true
 	controls.clear()
@@ -1469,6 +1528,7 @@ func lose_ship() -> void:
 	auto_pilot = false
 	time_factor = 1
 	update_player_exhaust(0)
+	flight_effects.hide()
 	var effect = preload("res://src/presentation/explosion.gd").new()
 	add_child(effect)
 	effect.configure(
@@ -1497,5 +1557,5 @@ func advance_defeat_presentation(seconds: float) -> void:
 	# runs independently of frozen combat, deadlines, radio and survival scoring.
 	if not player_destroyed or seconds <= 0 or not is_finite(seconds):
 		return
-	player_hit.begin_step()
+	player_hit.clear_flash()
 	advance_explosions(seconds)

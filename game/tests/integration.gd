@@ -9775,8 +9775,8 @@ func check_player_exhaust_speed(lib) -> void:
 			resumed.setup(lib, copy, {}, true)
 			resumed.set_physics_process(false)
 			check(
-				resumed.player_hull.get_child(0).scale.is_equal_approx(nozzle.scale),
-				"Resume immediately restores speed-dependent exhaust"
+				resumed.player_hull.get_child(0).scale.is_equal_approx(source_scale * Vector3(sqrt(.5), sqrt(.5), .5)),
+				"Resume restores half-speed dimensions with a fresh cosmetic pulse phase"
 			)
 			resumed.free()
 	# Use the real controller path and move the ship, rather than directly scaling
@@ -9809,7 +9809,7 @@ func check_player_exhaust_speed(lib) -> void:
 						(
 							absf(
 								(
-									nozzle.scale.z / source_scale.z
+									nozzle.scale.z / (source_scale.z * (1.0 + sin(flight.player_burner.phase) * lib.content.npc_exhaust.pulse_fraction))
 									- (
 										displacement.dot(-flight.ship.basis.z)
 										/ (.25 * float(lib.content.player_motion.cruise_speed))
@@ -9829,8 +9829,8 @@ func check_player_exhaust_speed(lib) -> void:
 		flight.throttle = 1
 		flight.step(1.0 / 60)
 	check(
-		nozzle.visible and nozzle.scale.is_equal_approx(source_scale),
-		"Repeated throttle changes return to original dimensions without drift"
+		nozzle.visible and nozzle.scale.is_equal_approx(source_scale * (1.0 + sin(flight.player_burner.phase) * lib.content.npc_exhaust.pulse_fraction)),
+		"Repeated throttle changes preserve source dimensions beneath cosmetic pulsing"
 	)
 	var stationary = lib.model(lib.ship_model(pilot.ship_id))
 	lib.attach_ship_exhaust(stationary, int(lib.content.tables.buyable_ships[pilot.ship_id]), true)
@@ -9845,9 +9845,9 @@ func check_player_exhaust_speed(lib) -> void:
 	check(
 		(
 			flight.speed > lib.content.player_motion.cruise_speed
-			and nozzle.scale.is_equal_approx(source_scale)
+			and nozzle.scale.z > source_scale.z * (1.0 + sin(flight.player_burner.phase) * lib.content.npc_exhaust.pulse_fraction)
 		),
-		"Boost uses actual movement rather than low throttle for full exhaust"
+		"Boost expands source exhaust even at low throttle"
 	)
 	var before = nozzle.scale
 	flight.pause(true)
@@ -14951,9 +14951,12 @@ func check_player_hit_effects(source: PackedByteArray, lib) -> void:
 		"Sound stream cache reuses valid IDs and rejects absent ones"
 	)
 	node.begin_step()
+	check(node.meshes.hull.visible, "Unrendered flash survives another physics step")
+	node.mark_presented()
+	node.begin_step()
 	check(
 		not node.meshes.hull.visible and not node.meshes.shield.visible,
-		"Hit mesh clears on next simulation step"
+		"Presented hit mesh clears on next simulation step"
 	)
 	var state := Session.new()
 	state.configure(lib, true)
@@ -14976,6 +14979,7 @@ func check_player_hit_effects(source: PackedByteArray, lib) -> void:
 	flight.step(.02)
 	check(flight.player_hit.meshes.hull.visible, "Paused simulation retains current impact frame")
 	flight.paused = false
+	flight.player_hit.mark_presented()
 	flight.ship.position = Vector3(10000, 10000, 10000)
 	flight.throttle = 0
 	flight.step(.01)

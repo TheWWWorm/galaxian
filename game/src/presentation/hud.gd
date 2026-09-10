@@ -559,10 +559,10 @@ func draw_survival(extent: Vector2) -> void:
 		survival_rules.score_top
 	)
 	draw_texture(survival_score_image, at)
-	bitmap(
-		str(int(flight.session.active_job.survival.score)),
-		at + Vector2(survival_rules.score_text[0], survival_rules.score_text[1])
-	)
+	var text_at := at + Vector2(survival_rules.score_text[0], survival_rules.score_text[1])
+	# Raise the visible digits within the narrow score frame on both layouts.
+	text_at.y -= 3.0
+	bitmap(str(int(flight.session.active_job.survival.score)), text_at)
 	bitmap(
 		SurvivalResult.duration(flight.session.elapsed),
 		Vector2(

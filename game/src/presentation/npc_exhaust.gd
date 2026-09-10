@@ -47,7 +47,12 @@ func configure(parameters: Dictionary, hull: MeshInstance3D) -> void:
 func advance(seconds: float, current_speed: float) -> void:
 	if seconds <= 0 or not is_finite(seconds) or not is_finite(current_speed):
 		return
-	var active: bool = current_speed >= data.boost_threshold
+	advance_active(seconds, current_speed >= data.boost_threshold)
+
+
+func advance_active(seconds: float, active: bool) -> void:
+	if seconds <= 0 or not is_finite(seconds):
+		return
 	if active and not boosting:
 		extension = 0.0
 		boost_elapsed = 0.0

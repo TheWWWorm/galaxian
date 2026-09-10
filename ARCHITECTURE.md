@@ -1147,3 +1147,37 @@ crossing explicitly. Original integer rounding and per-frame cap/decay offsets a
 not replicated. Banking gets a native 60 ms exponential presentation filter to
 reduce small, intermittent mouse-packet jitter; it never changes the flight frame.
 The mode's help describes the iPhone reconstruction and native mouse adaptation.
+
+
+In the original-controls chase view, the rendered hull takes its base orientation
+from the camera, then applies the smoothed cosmetic roll/pitch. Its local basis
+compensates for the physical ship's heading, so camera follow lag does not add
+visible ship yaw. Camera updates refresh this basis without advancing the bank
+filter again. The physical ship retains movement, aiming, collision and saved
+orientation. Default controls, first-person and authored external cameras retain
+the physical hull frame. This is a native presentation adjustment informed by
+reference footage, not a new original-binary behavior claim.
+
+Flight feedback imports the player boost envelope, perspective angles, moving-star
+sprite rectangles/dimensions and the boost sound binding. The player uses the same
+imported burner envelope as NPC engines, driven by its explicit boost state. A
+successful activation plays the registered cue on the effects bus. Boost FOV,
+particles, exhaust and sound apply to both steering modes. Native particle updates
+normalize the source's frame-based movement to simulation time; pausing freezes
+feedback. Cosmetic particle positions and trail history are recreated on load.
+
+Fighter ribbons reuse the imported trail material, widths and history capacities.
+Allegiance selects campaign colors; Survival archetypes select the imported tier
+colors while retaining the ship ribbon's texture coordinates. Source ship-type
+exclusions and the large ship's two attachment offsets remain data-driven. Trails
+are owned by each ship visual and discarded on destruction or respawn.
+
+Player hit presentation now passes the incoming world-space direction to the
+imported flash mesh. Render completion acknowledges a flash before a subsequent
+simulation step may clear it, preserving impacts across multiple fixed updates
+per draw. Sound players are cached per registered cue: different variants overlap
+and repeated variants restart their own voice. Source-derived shake duration and
+coordinate scaling drive a temporary camera offset for surviving hits in both
+control schemes, without altering physical ship motion or extending an active
+shake on subsequent hits. Import schema80 carries these declarations; campaign29
+and Survival11 save formats are unchanged.

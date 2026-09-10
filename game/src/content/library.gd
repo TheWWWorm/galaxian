@@ -246,6 +246,12 @@ func load_contract_data() -> bool:
 
 
 func validate_content() -> bool:
+	if not preload("res://src/presentation/flight_effects.gd").valid(content.get("flight_effects"), content.get("materials", {}), content.get("projectile_trails", {}).get("styles", {})):
+		error = "Invalid imported flight effects. Import the IPA again."
+		return false
+	if not content.get("sound_bank", {}).has(str(int(content.flight_effects.boost_sound))):
+		error = "Missing imported boost sound. Import the IPA again."
+		return false
 	if not preload("res://src/simulation/mines.gd").valid_parameters(
 		content.get("mine_behavior"),
 		content.get("resources", {}),

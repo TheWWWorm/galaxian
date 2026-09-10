@@ -358,6 +358,7 @@ func extract_content() -> Dictionary:
 		"travel": read_phase("Reading travel rules", travel_rules),
 		"sky": read_phase("Reading space backgrounds", sky_presentation),
 		"player_motion": read_phase("Reading ship motion", player_motion),
+		"flight_effects": read_phase("Reading flight effects", flight_effects),
 		"fighter_steering": read_phase("Reading fighter steering", fighter_steering),
 		"fighter_evasion": read_phase("Reading fighter maneuvers", fighter_evasion),
 		"fighter_motion": read_phase("Reading fighter speed", fighter_motion),
@@ -13104,7 +13105,11 @@ func player_hit_presentation() -> Dictionary:
 		[0x54d56, "__ZN11AbyssEngine8AERandom7nextIntEi"],
 		[0x54d60, "__ZN11AbyssEngine18ApplicationManager9SoundPlayEi"],
 		[0x54dba, "__ZN11AbyssEngine11PaintCanvas17TransformSetLocalEjRKNS_6AEMath6MatrixE"],
-		[0x54120, "__ZN11AbyssEngine11PaintCanvas13DrawTransformEj"]
+		[0x54120, "__ZN11AbyssEngine11PaintCanvas13DrawTransformEj"],
+		[0x54d70, "__ZN18TargetFollowCamera3hitEv"],
+		[0x54dc4, "__ZN6Player12getHitVectorEv"],
+		[0x54f30, "__ZN11AbyssEngine6AEMath17MatrixSetRotationERNS0_6MatrixERKNS0_6VectorE"],
+		[0x5f894, "__ZN11AbyssEngine8AERandom7nextIntEi"]
 	]:
 		if call_target(link[0]) != symbol_address(link[1]):
 			fail("Unsupported player hit presentation consumer.")
@@ -13116,7 +13121,11 @@ func player_hit_presentation() -> Dictionary:
 		[0x54d0e, 0x2200],
 		[0x54d10, 0x54ea],
 		[0x54d78, 0x2201],
-		[0x54d84, 0xdc0e]
+		[0x54d84, 0xdc0e],
+		[0x5f4d8, 0xd103],
+		[0x5f882, 0x1046],
+		[0x5f888, 0x0072],
+		[0x5f8e2, 0x109b]
 	]:
 		if u16(pair[0]) != pair[1]:
 			fail("Unsupported player hit effect selection.")
@@ -13133,7 +13142,11 @@ func player_hit_presentation() -> Dictionary:
 			"visual_shield_above": u16(0x54d82) & 255,
 			"sound_shield_above": u16(0x54d2c) & 255,
 			"sounds": sounds,
-			"lifetime": "simulation_step"
+			"lifetime": "render_frame",
+			"shake": {
+				"duration": shifted_at(0x5f872, 0x5f874, 3) / 1000.0,
+				"units_per_ms": .02 / float(1 << ((u16(0x5f8e2) >> 6) & 31))
+			}
 		}
 		if error.is_empty()
 		else {}
@@ -16167,3 +16180,131 @@ func public_survival_type() -> int:
 			fail("Unsupported generated mission selection in public survival.")
 			return -1
 	return immediate_at(generator + 0x14a, 1)
+
+
+func flight_effects() -> Dictionary:
+	# Recover bounded declarations and verify their consumers. Native effects use
+	# simulation time; the original per-render particle movement is normalized.
+	for pair in [
+		[0x5401e, "__ZN11AbyssEngine18ApplicationManager9SoundPlayEi"],		[0x54a94, "__ZN9PlayerEgo18getBoostPercentageEv"],
+		[0x54aaa, "__ZN11MovingStars6updateEiRN11AbyssEngine6AEMath6MatrixEbf"],
+		[0x54ab8, "__ZN7Booster6updateEjb"],
+		[0x540b6, "__ZN11MovingStars6renderEv"],
+		[0x44fc8, "__ZN9PlayerEgo18getBoostPercentageEv"],
+		[0x44fee, "__ZN11AbyssEngine11PaintCanvas20CameraSetPerspectiveEjiii"],
+		[0x4da2a, "__ZN7Globals15createBillBoardEiiiiiii"],
+		[0x55854, "__ZN5TrailC1Eii"],
+		[0x558f4, "__ZN5TrailC1Eii"],
+		[0x55b4a, "__ZN5Trail6updateERKN11AbyssEngine6AEMath6VectorES4_"],
+		[0x29992, "__ZN13PlayerFighter16changeTrailColorEi"]
+	]:
+		if call_target(pair[0]) != symbol_address(pair[1]):
+			fail("Unsupported flight effect consumer at %x." % pair[0])
+			return {}
+	for pair in [
+		[0x53bf8, 0x6dc0],
+		[0x53c1a, 0xd00c],
+		[0x53c26, 0xd101],
+		[0x44fdc, 0x18c2],
+		[0x44fe4, 0x0112],
+		[0x4d53e, 0x3032],
+		[0x4d55c, 0x18c3],
+		[0x4d92c, 0x2dc8],
+		[0x4d7ee, 0xdd69],
+		[0x4d888, 0x18c0],
+		[0x55844, 0xd001],
+		[0x55848, 0xe000],
+		[0x55ae6, 0xdd39],
+		[0x29980, 0xdc01],
+		[0x29988, 0xdc01]
+	]:
+		if u16(pair[0]) != pair[1]:
+			fail("Unsupported flight effect declaration at %x." % pair[0])
+			return {}
+	var helpers := imported_symbols()
+	for pair in [
+		[0x53c00, "___divsf3vfp"],
+		[0x53c14, "___gesf2vfp"],
+		[0x53c20, "___gtsf2vfp"],
+		[0x53c30, "___subsf3vfp"],
+		[0x44fce, "___mulsf3vfp"],
+		[0x4d51e, "___mulsf3vfp"],
+		[0x4d534, "___mulsf3vfp"],
+		[0x4d544, "___mulsf3vfp"]
+	]:
+		if not helpers.get(pair[1], []).has(call_target(pair[0])):
+			fail("Unsupported flight effect arithmetic.")
+			return {}
+	var uv := []
+	var table := literal(0x4d9dc, 2)
+	for i in immediate_at(0x4d9ee, 1):
+		var rect := int_array(table + i * 16, 4)
+		if rect.size() != 4:
+			return {}
+		uv.append(
+			[rect[0] / 4096.0, 1.0 - rect[3] / 4096.0, rect[2] / 4096.0, 1.0 - rect[1] / 4096.0]
+		)
+	var timing := player_steering()
+	if timing.is_empty():
+		return {}
+	var result := {
+		"boost_sound": immediate_at(0x54018, 1),
+		"ramp_seconds": literal_float(0x53bfe, 1) / 1000.0,
+		"plateau": literal_float(0x53c28, 4),
+		"release_at": literal_float(0x53c1e, 1),
+		"end_at": literal_float(0x53c2e, 0),
+		"fov_degrees": shifted_at(0x44fd6, 0x44fd8, 3) * 16.0 * 360.0 / 65536.0,
+		"fov_boost_degrees": literal_float(0x44fcc, 1) * 16.0 * 360.0 / 65536.0,
+		"stars":
+		{
+			"count": immediate_at(0x4d9a4, 0) / 4,
+			"material": literal(0x4da20, 2),
+			"uv": uv,
+			"reference_seconds": timing.reference_seconds,
+			"half_width": immediate_at(0x4da1c, 1) * .02,
+			"half_length": shifted_at(0x4d526, 0x4d528, 2) * .02,
+			"boost_width": literal_float(0x4d52a, 1) * .02,
+			"boost_length": literal_float(0x4d51a, 1) * .02,
+			"boost_speed": literal_float(0x4d53c, 1) * .02 / timing.reference_seconds,
+			"boost_speed_base": shifted_at(0x4d54c, 0x4d54e, 3) * .02 / timing.reference_seconds,
+			"normal_speed_min": shifted_at(0x4d884, 0x4d886, 3) * .02 / timing.reference_seconds,
+			"normal_speed_range": shifted_at(0x4d526, 0x4d528, 2) * .02 / timing.reference_seconds,
+			"spawn_x": [signed_literal(0x4d812, 2) * .02, literal(0x4d7f2, 3) * .02],
+			"spawn_y": [signed_literal(0x4d81a, 3) * .02, literal(0x4d80c, 1) * .02],
+			"spawn_depth": literal(0x4d7f2, 3) * .02,
+			"normal_interval": float((u16(0x4d7ec) & 255) + 1) / 1000.0,
+			"normal_lifetime": shifted_at(0x4d88e, 0x4d892, 3) / 1000.0,
+			"boost_lifetime": shifted_at(0x4d526, 0x4d528, 2) / 1000.0
+		},
+		"trails":
+		{
+			"enemy": immediate_at(0x55846, 1),
+			"ally": immediate_at(0x5584a, 1),
+			"segments": immediate_at(0x55852, 2),
+			"interval": float((u16(0x55ae4) & 255) + 1) / 1000.0,
+			"excluded":
+			[
+				u16(0x557f2) & 255,
+				u16(0x557f6) & 255,
+				literal(0x557fa, 3),
+				literal(0x557fa, 3) - 1,
+				u16(0x55806) & 255,
+				u16(0x5580a) & 255
+			],
+			"double_actor": u16(0x55aea) & 255,
+			"double_segments": immediate_at(0x558f2, 2),
+			"double_style": immediate_at(0x558f0, 1),
+			"double_offsets":
+			[
+				[signed_literal(0x55af6, 3), -immediate_at(0x55afc, 3), signed_literal(0x55b04, 3)],
+				[signed_literal(0x55b22, 3), -immediate_at(0x55afc, 3), signed_literal(0x55b04, 3)]
+			],
+			"forced_ally_actor": u16(0x5580e) & 255,
+			"forced_ally_chapter": u16(0x55820) & 255,
+			"survival_limits": [u16(0x2997e) & 255, u16(0x29986) & 255],
+			"survival_styles":
+			[immediate_at(0x29982, 1), immediate_at(0x2998a, 1), immediate_at(0x2998e, 1)],
+			"marked_style": immediate_at(0x370f0, 1)
+		}
+	}
+	return result if error.is_empty() else {}
