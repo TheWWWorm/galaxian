@@ -13,6 +13,10 @@ var library
 var session
 var controls := Controls.new()
 var ship := CharacterBody3D.new()
+const Steering = preload("res://src/simulation/player_steering.gd")
+var mouse_motion := Vector2.ZERO
+var player_hull_rest := Basis.IDENTITY
+var displayed_bank := Vector3.ZERO
 var player_hull: MeshInstance3D
 var camera := Camera3D.new()
 var station
@@ -62,7 +66,7 @@ var damage_feedback = preload("res://src/presentation/damage_feedback.gd").new()
 var weapon_hit_ms := 0.0
 var intro_stage := -1
 var rng := RandomNumberGenerator.new()
-var settings := {"sensitivity": .0025, "invert": false, "aim_assist": true}
+var settings := {"sensitivity": .0025, "invert": false, "original_flight_controls": false, "aim_assist": true}
 var audio := preload("res://src/presentation/audio_settings.gd").effect_player()
 var capture_button_held := false
 var web_mouse_input := OS.has_feature("web")
@@ -80,6 +84,7 @@ func setup(data, state, options: Dictionary, resume: bool = false) -> void:
 	speed = session.Motion.speed(session.motion, library.content.player_motion)
 	weapon_timers = session.combat.cooldowns
 	settings.merge(options, true)
+	if not original_controls(): session.motion.turn = [0.0, 0.0]
 	rng.seed = state.station_id * 7381 + 271
 	effect_random.randomize()
 	ship.collision_layer = 0
@@ -88,6 +93,8 @@ func setup(data, state, options: Dictionary, resume: bool = false) -> void:
 	var hull: MeshInstance3D = library.model(library.ship_model(session.ship_id))
 	ship.add_child(hull)
 	player_hull = hull
+	player_hull_rest = hull.basis
+	update_player_bank()
 	library.attach_ship_exhaust(
 		hull, int(library.content.tables.buyable_ships[session.ship_id]), true
 	)
@@ -221,8 +228,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		event is InputEventMouseMotion and mouse_steering_enabled()
 		and event.device != InputEvent.DEVICE_ID_EMULATION
 	):
-		steer(-event.relative.x * float(settings.sensitivity),
-			-event.relative.y * float(settings.sensitivity) * (-1 if settings.invert else 1))
+		var movement := Vector2(-event.relative.x, -event.relative.y * (-1 if settings.invert else 1)) * float(settings.sensitivity)
+		if original_controls():
+			mouse_motion += movement
+		else:
+			steer(movement.x, movement.y)
 		if event.relative.length() > 2:
 			auto_pilot = false
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -260,6 +270,44 @@ func steer(yaw: float, pitch: float) -> void:
 	ship.rotate_object_local(Vector3.UP, yaw)
 	ship.rotate_object_local(Vector3.RIGHT, pitch)
 	ship.basis = ship.basis.orthonormalized()
+
+
+func original_controls() -> bool:
+	return settings.get("original_flight_controls", false) == true
+
+
+func apply_control_settings(options: Dictionary) -> void:
+	var previous := original_controls()
+	settings.merge(options, true)
+	if previous != original_controls():
+		mouse_motion = Vector2.ZERO
+		session.motion.turn = [0.0, 0.0]
+		displayed_bank = Vector3.ZERO
+		update_player_bank()
+
+
+func player_agility() -> float:
+	var data: Dictionary = library.content.player_motion.steering
+	return float(data.agilities[int(library.ships[session.ship_id][int(data.ship_type_column)])])
+
+
+func advance_turn(input: Vector2, seconds: float) -> void:
+	if original_controls():
+		var angles := Steering.advance(session.motion.turn, library.content.player_motion.steering, player_agility(), input, seconds)
+		steer(angles.x, angles.y)
+	else:
+		session.motion.turn = [0.0, 0.0]
+		steer(input.x * seconds * 1.2, input.y * seconds * 1.2)
+	update_player_bank(seconds)
+
+
+func update_player_bank(seconds: float = 0.0) -> void:
+	if not is_instance_valid(player_hull): return
+	var target := Steering.bank(session.motion.turn, library.content.player_motion.steering) if original_controls() else Vector3.ZERO
+	# Native presentation filtering prevents sparse mouse packets from snapping the
+	# hull between banking angles. This never alters the actual flight/aim frame.
+	displayed_bank = displayed_bank.lerp(target, 1.0 - exp(-seconds / .06)) if seconds > 0 and original_controls() else target
+	player_hull.basis = Basis.from_euler(displayed_bank) * player_hull_rest
 
 
 func cinematic_locked() -> bool:
@@ -331,7 +379,9 @@ func _physics_process(delta: float) -> void:
 		time_factor = mini(time_factor, 2)
 	elif ship.position.distance_to(waypoint) < 320:
 		time_factor = 1
+	var pointer := mouse_motion
 	for substep in time_factor:
+		mouse_motion = pointer
 		step(minf(delta, .05))
 		if paused:
 			break
@@ -414,12 +464,18 @@ func step(dt: float) -> void:
 		var pitch: float = (
 			float(Input.is_physical_key_pressed(KEY_DOWN))
 			- float(Input.is_physical_key_pressed(KEY_UP))
-			- pad.look.y
+			- pad.look.y * (-1 if settings.invert else 1)
 		)
+		var pointer := Steering.mouse_axis(mouse_motion, dt, Steering.maximum_rate(library.content.player_motion.steering, player_agility()))
+		mouse_motion = Vector2.ZERO
+		yaw += pointer.x
+		pitch += pointer.y
 		throttle = clampf(throttle + up * dt * .55, 0, 1)
 		if absf(strafe) + absf(up) + absf(yaw) + absf(pitch) > .01:
 			auto_pilot = false
 		if auto_pilot:
+			session.motion.turn = [0.0, 0.0]
+			update_player_bank()
 			var direction: Vector3 = navigation_target() - ship.position
 			var arrival_radius: float = (
 				dock_radius - ship.safe_margin * 2.0
@@ -435,7 +491,7 @@ func step(dt: float) -> void:
 				if session.active_job.is_empty() or session.active_job.get("ready", false):
 					auto_pilot = false
 		else:
-			steer(yaw * dt * 1.2, pitch * dt * 1.2)
+			advance_turn(Vector2(yaw, pitch), dt)
 		var boost_down: bool = (
 			Input.is_physical_key_pressed(KEY_SHIFT) or pad.boost or controls.touch_boost
 		)
@@ -491,9 +547,11 @@ func step(dt: float) -> void:
 					return
 	else:
 		controls.clear()
+		mouse_motion = Vector2.ZERO
 		boost_held = false
 		auto_pilot = false
 		if not frozen:
+			advance_turn(Vector2.ZERO, dt)
 			# Captured controls still allow flight; explicit freeze preserves
 			# velocity for the moment the authored conversation releases it.
 			var movement: Dictionary = session.Motion.advance(
@@ -1226,14 +1284,21 @@ func update_camera(dt: float) -> void:
 		if first_person
 		else ship.position + ship.basis.z * follow_distance + ship.basis.y * 15
 	)
-	camera.position = camera.position.lerp(desired, minf(dt * 8, 1))
-	camera.basis = camera.basis.slerp(ship.basis, minf(dt * 10, 1)).orthonormalized()
+	if original_controls():
+		var follow: Dictionary = library.content.player_motion.steering
+		var ticks := dt / float(follow.reference_seconds)
+		camera.position = camera.position.lerp(desired, 1.0 - pow(1.0 - float(follow.position_blend), ticks))
+		camera.basis = camera.basis.slerp(ship.basis, 1.0 - pow(1.0 - float(follow.look_blend), ticks)).orthonormalized()
+	else:
+		camera.position = camera.position.lerp(desired, minf(dt * 8, 1))
+		camera.basis = camera.basis.slerp(ship.basis, minf(dt * 10, 1)).orthonormalized()
 
 	if backdrop != null:
 		backdrop.follow(camera)
 
 
 func pause(value: bool) -> void:
+	mouse_motion = Vector2.ZERO
 	paused = value
 	controls.clear()
 	time_factor = 1
@@ -1273,6 +1338,7 @@ func watch_browser_capture() -> void:
 
 
 func release_mouse() -> void:
+	mouse_motion = Vector2.ZERO
 	mouse_flight_enabled = false
 	web_lock_observed = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE

@@ -66,12 +66,15 @@ var settings := {
 	"language": "gb",
 	"sensitivity": .0025,
 	"invert": false,
+	"original_flight_controls": false,
 	"aim_assist": true,
 	"targeting_reticle": null,
 	"music": true,
 	"music_volume": 1.0,
 	"effects_volume": 1.0,
 	"touch": false,
+	"flight_overlays": true,
+	"extra_flight_buttons": true,
 	"linked_fire": false,
 	"fullscreen": false,
 	"aspect_ratio": "auto"
@@ -844,7 +847,12 @@ func continue_game(slot: String) -> void:
 	var candidate := Session.new()
 	candidate.configure(library, slot == "free")
 	if not candidate.load_retry(save_path(slot)):
-		notify(candidate.error)
+		if candidate.load_save(save_path(slot)) and candidate.slot == slot and not candidate.docked:
+			transient_preview = false
+			session = candidate
+			show_load_menu()
+		else:
+			notify(candidate.error)
 		return
 	transient_preview = false
 	session = candidate
@@ -1157,14 +1165,77 @@ func defeat_choice(index: int) -> void:
 	if defeat_notice or index == 1:
 		show_title()
 		return
-	var candidate := Session.new()
-	candidate.configure(library, session.slot == "free")
-	if transient_preview or not candidate.load_retry(save_path(session.slot)):
+	if transient_preview:
 		show_defeat_message(library.text(int(library.content.defeat_ui.labels.missing)), true)
 		return
-	if candidate.slot != session.slot:
-		show_defeat_message("The saved game belongs to a different pilot slot.", true)
+	show_load_menu()
+
+
+func show_load_menu() -> void:
+	if survival_active() or transient_preview: return
+	if flight != null: flight.pause(true)
+	clear_page()
+	screen = "load_recovery"
+	page.hide(); top.hide(); status.hide()
+	pause_panel = preload("res://src/presentation/title_menu.gd").new()
+	ui.add_child(pause_panel)
+	pause_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pause_panel.configure(library)
+	var saved := Session.new()
+	saved.configure(library, session.slot == "free")
+	# Recovery can use a valid dead primary; autosave separately prefers a live backup.
+	var available: bool = saved.load_save(save_path(session.slot)) and saved.slot == session.slot
+	var autosave := Session.new()
+	autosave.configure(library, session.slot == "free")
+	var can_resume: bool = autosave.load_retry(save_path(session.slot)) and autosave.slot == session.slot
+	var entries := [{"text": "Load autosave", "action": "autosave", "enabled": can_resume}]
+	for key in ["departure", "station"]:
+		entries.append({"text": "Load mission / flight start" if key == "departure" else "Load last station", "action": key, "enabled": available and saved.checkpoint_candidate(key) != null})
+	if available and saved.checkpoints.is_empty() and not saved.docked:
+		entries.append({"text": "Recover to station (older save)", "action": "legacy"})
+	pause_panel.present("load", entries, library.text(int(library.content.briefing_ui.labels.back)), "back")
+	pause_panel.action_requested.connect(load_choice)
+
+
+func close_load_menu() -> void:
+	if flight == null:
+		show_title()
+	elif session == defeated_session:
+		defeat(bool(session.active_job.get("failed", false)))
+	else:
+		show_pause()
+
+
+func load_choice(action: String) -> void:
+	if screen != "load_recovery" or transient_preview or survival_active(): return
+	if action == "back":
+		close_load_menu()
 		return
+	if action == "legacy":
+		confirm("Recover older save?", "This save has no mission-start or station snapshot. Return to its station with repaired hull and shields, keeping its current inventory and credits. The unfinished mission is reset without completion rewards.", restore_checkpoint.bind(action))
+		return
+	restore_checkpoint(action)
+
+
+func restore_checkpoint(action: String) -> void:
+	if screen != "load_recovery" or transient_preview or survival_active(): return
+	var candidate := Session.new()
+	candidate.configure(library, session.slot == "free")
+	var loaded := candidate.load_retry(save_path(session.slot)) if action == "autosave" else candidate.load_save(save_path(session.slot))
+	if not loaded or candidate.slot != session.slot:
+		notify("No usable saved game is available in this pilot slot.")
+		status.show()
+		return
+	if action in ["departure", "station"]:
+		candidate = candidate.checkpoint_candidate(action)
+		if candidate == null:
+			notify("This save has no usable checkpoint of that kind.")
+			status.show()
+			return
+	elif action == "legacy":
+		if not candidate.checkpoints.is_empty() or candidate.docked: return
+		candidate.retry_mission()
+	elif action != "autosave": return
 	session = candidate
 	defeated_session = null
 	if session.docked:
@@ -1204,7 +1275,7 @@ func show_flight_hud() -> void:
 	flight_objective.offset_top = 12
 	flight_objective.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	flight_objective.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	flight_objective.visible = not survival_active()
+	flight_objective.visible = not survival_active() and settings.flight_overlays
 	var extra := VBoxContainer.new()
 	hud.add_child(extra)
 	extra.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
@@ -1216,11 +1287,13 @@ func show_flight_hud() -> void:
 	radio = label("", 14, Color("b5d4de"))
 	radio.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	extra.add_child(radio)
+	radio.visible = settings.flight_overlays
 	flight_stats = label("", 14)
 	flight_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	extra.add_child(flight_stats)
+	flight_stats.visible = settings.flight_overlays
 	var controls := HBoxContainer.new()
-	controls.visible = bool(settings.touch)
+	controls.visible = bool(settings.touch) and settings.extra_flight_buttons
 	controls.alignment = BoxContainer.ALIGNMENT_CENTER
 	extra.add_child(controls)
 	var actions := ["TIME"] if survival_active() else ["TIME", "AUTOPILOT", "DOCK"]
@@ -1309,6 +1382,7 @@ func pause_action(action: String) -> void:
 		"menu":
 			if save_game(false): show_title()
 		"abandon": abandon_survival()
+		"load": show_load_menu()
 
 
 func resume_flight() -> void:
@@ -1356,6 +1430,8 @@ func navigate_back() -> void:
 		advance_survival_result()
 	elif screen == "defeat":
 		show_title()
+	elif screen == "load_recovery":
+		close_load_menu()
 	elif screen == "flight":
 		show_pause()
 	elif screen == "pause":
@@ -1579,7 +1655,7 @@ func show_options() -> void:
 	# Settings before an archive is installed cannot use its artwork or labels.
 	var box := column(650)
 	caption("Options & controls", "Mouse + keyboard, controller and touch flight.", box)
-	var option_keys := ["music", "invert", "aim_assist", "linked_fire", "touch"]
+	var option_keys := ["music", "invert", "original_flight_controls", "aim_assist", "linked_fire", "touch", "flight_overlays", "extra_flight_buttons"]
 	if ready_content:
 		option_keys.insert(3, "targeting_reticle")
 	for key in option_keys:
@@ -1587,10 +1663,13 @@ func show_options() -> void:
 		check.text = (
 			{
 				"music": "Music",
-				"invert": "Invert mouse pitch",
+				"invert": "Invert pitch",
+				"original_flight_controls": "Original flight controls",
 				"aim_assist": "Aim assistance",
 				"linked_fire": "Fire all mounted primary weapons together",
-				"touch": "Show touch controls"
+				"touch": "Show touch controls",
+				"flight_overlays": "Show flight text overlays",
+				"extra_flight_buttons": "Show extra flight buttons"
 			}
 			. get(key, "")
 		)
@@ -1630,7 +1709,7 @@ func show_options() -> void:
 
 func close_options() -> void:
 	if flight != null:
-		flight.settings.merge(settings, true)
+		flight.apply_control_settings(settings)
 		show_pause()
 	elif options_return_screen == "dock":
 		show_dock()
@@ -1659,7 +1738,7 @@ func change_option(key: String, value: Variant) -> void:
 		settings[key] = clampf(float(value), .0005, .008) if key == "sensitivity" else clampf(float(value), 0, 1)
 		if key == "music_volume":
 			settings.music = settings.music_volume > 0
-	elif key in ["invert", "aim_assist", "linked_fire", "touch", "targeting_reticle"] and value is bool:
+	elif key in ["invert", "original_flight_controls", "aim_assist", "linked_fire", "touch", "targeting_reticle", "flight_overlays", "extra_flight_buttons"] and value is bool:
 		settings[key] = value
 	else:
 		return
@@ -1690,6 +1769,7 @@ func load_settings() -> void:
 	for key in settings:
 		if file.has_section_key("options", key):
 			settings[key] = file.get_value("options", key)
+	settings.original_flight_controls = settings.original_flight_controls == true
 	for key in ["music_volume", "effects_volume"]:
 		var value: Variant = settings[key]
 		settings[key] = clampf(float(value), 0, 1) if (value is float or value is int) and is_finite(float(value)) else 1.0
@@ -1994,6 +2074,8 @@ func acknowledge_recovery() -> void:
 
 func controls_help() -> String:
 	var other := "W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nEsc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses."
+	other += "\nOriginal flight controls enables reconstructed iPhone-style agility, inertia and banking. Mouse input is adapted. Off uses the previous remake controls."
+	other += "\nInvert reverses mouse, controller and touch Y. Arrow keys keep their direction."
 	var touch := "Touch: use the centered stick or drag empty space to steer. Hold Fire to shoot; double-tap Fire to enable autofire. Tap Fire once to stop. AUTO appears on the fire button while enabled. Pausing clears autofire."
 	return touch + "\n\n" + other if settings.touch else other + "\n\n" + touch
 

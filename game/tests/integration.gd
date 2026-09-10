@@ -7802,7 +7802,8 @@ func check_player_motion(source: PackedByteArray, lib) -> void:
 				"boost_speed": 100.0,
 				"boost_seconds": 5.0,
 				"recharge_seconds": 20.0,
-				"contact": {"damage": 5, "interval": .5, "forward_keep": .5}
+				"contact": {"damage": 5, "interval": .5, "forward_keep": .5},
+				"steering": parameters.steering
 			})
 		),
 		"Original millisecond-based speed and boost pulse/recharge are imported"
@@ -7935,7 +7936,8 @@ func check_player_motion(source: PackedByteArray, lib) -> void:
 				"boost_speed": 140.0,
 				"boost_seconds": 4.0,
 				"recharge_seconds": 12.0,
-				"contact": {"damage": 5, "interval": .5, "forward_keep": .5}
+				"contact": {"damage": 5, "interval": .5, "forward_keep": .5},
+				"steering": parameters.steering
 			})
 		),
 		"Native motion follows changed IPA speed and timing declarations"
@@ -22015,7 +22017,7 @@ func check_pause_menu(source: PackedByteArray, lib) -> void:
 	app.show_pause()
 	var panel = app.pause_panel
 	check(panel != null and app.flight.paused and not app.page.visible and panel.buttons.size() == 5, "Original pause artwork replaces generic controls without advancing flight")
-	check(panel.buttons[0].text == lib.text(20) and root.gui_get_focus_owner() == panel.buttons[0] and not panel.footer.visible, "Continue Game is initially focused and campaign hides Survival action")
+	check(panel.buttons[0].text == lib.text(20) and root.gui_get_focus_owner() == panel.buttons[0] and panel.footer.visible and panel.footer.text == "Load / recover", "Continue Game is initially focused and campaign exposes recovery")
 	panel.handle_action("help")
 	check(panel.section == "help" and app.flight.paused, "Pause help stays within the paused original-art screen")
 	app.navigate_back()
@@ -22142,6 +22144,7 @@ func check_options_menu(source: PackedByteArray, lib) -> void:
 	app.navigate_back()
 	check(app.screen == "options" and app.options_panel.section == "options", "Back first returns from audio to option categories")
 	app.options_panel.handle_action("controls")
+	app.options_panel.handle_action("steering")
 	app.options_panel.handle_action("invert")
 	app.options_panel.handle_action("linked_fire")
 	app.options_panel.sliders.sensitivity.value = .004
@@ -22153,6 +22156,7 @@ func check_options_menu(source: PackedByteArray, lib) -> void:
 	check(app.options_panel.section == "controls", "Control help returns to Controls")
 	app.navigate_back()
 	app.options_panel.handle_action("display")
+	app.options_panel.handle_action("flight_hud")
 	var previous: bool = app.options_panel.values.targeting_reticle
 	app.options_panel.handle_action("targeting_reticle")
 	app.options_panel.handle_action("touch")
@@ -22185,7 +22189,9 @@ func check_options_menu(source: PackedByteArray, lib) -> void:
 	var saved: Dictionary = app.session.capture()
 	app.show_options()
 	app.options_panel.handle_action("display")
+	app.options_panel.handle_action("flight_hud")
 	app.options_panel.handle_action("touch")
+	app.navigate_back()
 	app.navigate_back()
 	app.navigate_back()
 	check(app.screen == "pause" and app.flight.paused and not app.flight.settings.touch, "Leaving flight options applies settings and retains pause")
@@ -22243,6 +22249,7 @@ func check_defeat_menu(source: PackedByteArray, lib) -> void:
 	check(not app.defeat_panel.geometry.is_empty() and app.defeat_panel.buttons.size() == 2, "Defeat original artwork produces usable button geometry")
 	check(app.save_game(false) and FileAccess.get_file_as_bytes(app.test_save) == saved, "Defeat autosave/quit preserves viable checkpoint bytes")
 	app.defeat_panel.accept(0)
+	app.load_choice("autosave")
 	app.flight.set_physics_process(false)
 	check(app.screen == "flight" and same_saved_value(app.session.capture(), checkpoint), "Retry restores complete in-flight checkpoint and rolls back failed-flight credits")
 	saved = FileAccess.get_file_as_bytes(app.test_save)
@@ -22262,6 +22269,7 @@ func check_defeat_menu(source: PackedByteArray, lib) -> void:
 	app.session.hull = 0
 	app.defeat()
 	app.defeat_panel.accept(0)
+	app.load_choice("autosave")
 	check(app.screen == "dock" and same_saved_value(app.session.capture(), station), "Station checkpoint retries at original saved station without rewards or inventory changes")
 	check(app.session.depart(), "Start missing-save retry case")
 	app.launch(true)
@@ -22271,7 +22279,8 @@ func check_defeat_menu(source: PackedByteArray, lib) -> void:
 	for suffix in ["", ".bak"]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(app.test_save + suffix))
 	app.defeat_panel.accept(0)
-	check(app.screen == "defeat" and app.session.hull == 0 and app.defeat_panel.visible and app.defeat_panel.message == lib.text(621), "Missing checkpoint reports original message without fabricating a repaired pilot")
+	app.load_choice("autosave")
+	check(app.screen == "load_recovery" and app.session.hull == 0 and app.status.visible, "Missing checkpoint leaves recovery open with an error and no fabricated pilot")
 	check(restored.save(app.test_save), "Write valid backup candidate")
 	var healthy := FileAccess.get_file_as_bytes(app.test_save)
 	restored.hull = 0
@@ -22280,8 +22289,9 @@ func check_defeat_menu(source: PackedByteArray, lib) -> void:
 	recovered.configure(lib)
 	check(recovered.load_retry(app.test_save) and same_saved_value(recovered.capture(), station), "Legacy defeated primary falls back to viable backup")
 	check(FileAccess.get_file_as_bytes(app.test_save + ".bak") == healthy, "Retry reader leaves preserved backup untouched")
-	app.defeat_panel.accept(0)
-	check(app.screen == "title", "Missing-save acknowledgement returns to main menu")
+	app.navigate_back()
+	app.defeat_panel.accept(1)
+	check(app.screen == "title", "Missing-save recovery can return to main menu")
 	app.continue_game("free")
 	check(app.screen == "dock" and app.session.hull > 0, "Continue also recovers a viable backup from a legacy dead save")
 	app.launch()
@@ -22290,9 +22300,11 @@ func check_defeat_menu(source: PackedByteArray, lib) -> void:
 	app.defeat()
 	app.transient_preview = true
 	app.defeat_panel.accept(0)
+	app.load_choice("autosave")
 	check(app.screen == "defeat" and app.session.hull == 0, "Transient scene preview cannot load a real pilot checkpoint")
 	app.transient_preview = false
 	app.defeat_panel.accept(0)
+	app.load_choice("autosave")
 	check(app.screen == "title", "Original Main menu choice leaves defeat")
 	app.session = Session.new()
 	app.session.configure(lib)

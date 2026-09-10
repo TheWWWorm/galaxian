@@ -1079,17 +1079,23 @@ truncation in the camera's intermediate states is not reproduced.
 
 The importer recovers `defeat_ui` text associations and backdrop geometry from
 supported source consumers. `DefeatMenu` reuses the shared original ChoiceWindow.
-Ship loss, objective loss and deadline failure select supplied messages. Retry
-restores a viable pilot checkpoint rather than keeping failed-flight inventory
-and granting repairs. Original station saves return to station; native flight saves
-resume their complete saved state. Missing checkpoints use the original acknowledged
-notice before returning to the main menu.
+Ship loss, objective loss and deadline failure select supplied messages. Load opens
+a recovery menu shared with Pause. Autosave resumes its complete state; departure
+and station snapshots roll back the whole pilot without granting rewards. Missing
+checkpoints are disabled. Older saves without snapshots offer a separately confirmed
+station recovery that retains current inventory/credits and repairs the ship.
 
 `Session.load_retry` validates primary and backup files and rejects dead or failed
 pilots. Both defeat retry and title Continue use this recovery path. Main's shared
 save entry point preserves the last viable checkpoint after defeat, including after
 leaving for the title and when closing or backgrounding the application. Survival
-retains its separate run/result archive. No new pilot schema is required.
+retains its separate run/result archive. Optional `checkpoints` metadata travels
+inside the atomic pilot save and its backup; it is excluded from simulation captures
+to prevent nested histories. Campaign, contract and free-flight departures capture
+station and departure states. Saving at a station updates that snapshot and clears
+the previous departure. Recovery validates the selected snapshot through the normal
+restore path, including content identity and pilot slot. Checkpoint metadata itself
+needs no schema bump; older saves remain readable through normal migrations.
 
 
 Desktop presentation uses half the imported phone composition scale; mobile retains
@@ -1105,3 +1111,39 @@ remain the original imported art.
 Flight HUD creation selects the flight camera after clearing station/menu scenery.
 This order prevents menu cleanup from stealing the active camera during exploration
 undock, resumed flight and pause return.
+
+
+Player steering reads the ship catalogue's type association and the supplied
+four-entry agility table. Bounded readers also recover angular-unit conversion,
+turn caps, response and release declarations, visual banking and follow-camera
+blend factors, tied to the source's requested reference interval. The independent
+`player_steering.gd` controller integrates angular velocity and displacement over
+time, including ramp-to-limit and release boundaries. Analog input uses the
+source square response; mouse displacement enters through a native rate adapter.
+Yaw and pitch follow the cockpit basis; only the rendered hull receives bank.
+Inversion affects mouse, controller and touch pitch; keyboard direction remains
+unchanged. Native throttle, strafe, autopilot and camera framing remain extensions.
+
+Content cache schema 78 requires reimporting older caches to recover these new
+declarations. Campaign/exploration save schema 29 and survival schema 11 store
+yaw/pitch angular velocity with motion state; previous saves migrate to a neutral
+turn. New checkpoint snapshots use the same migration and validation paths.
+Continuous-time integration avoids the original per-frame rounding and timing artifacts;
+it does not claim bit-identical physical-device handling.
+
+
+`original_flight_controls` defaults false, including when absent from existing
+preferences. Off restores direct mouse steering, linear 1.2 rad/s keyboard/stick
+response, an unbanked hull and the previous native follow-camera interpolation.
+On selects the reconstructed source-based profile. Switching clears pending mouse
+and angular state without changing heading; opening a save in default mode also
+clears angular state. Inversion remains limited to mouse/controller/touch pitch.
+
+The source clears its directional flags before the angular decay pass. The native
+controller therefore applies continuous damping during input too: drive minus drag
+when building speed, drag when reducing same-direction deflection, and drive plus
+drag during countersteering until crossing zero. Segment integration handles this
+crossing explicitly. Original integer rounding and per-frame cap/decay offsets are
+not replicated. Banking gets a native 60 ms exponential presentation filter to
+reduce small, intermittent mouse-packet jitter; it never changes the flight frame.
+The mode's help describes the iPhone reconstruction and native mouse adaptation.

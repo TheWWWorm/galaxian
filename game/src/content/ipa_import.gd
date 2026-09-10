@@ -1,7 +1,7 @@
 extends RefCounted
 signal progress(message: String, ratio: float)
 const NativeImport = preload("res://src/content/native_import.gd")
-const SCHEMA := 77
+const SCHEMA := 78
 var error := ""
 var root := ""
 var content_id := ""

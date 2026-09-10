@@ -201,7 +201,7 @@ func present(
 
 func make_button(text: String, action: String, idle: Texture2D, selected: Texture2D) -> Button:
 	var result := Button.new()
-	if OS.has_feature("web") and action in ["resume", "load_campaign", "load_free", "fullscreen"]:
+	if OS.has_feature("web") and action in ["resume", "load_campaign", "load_free", "autosave", "departure", "station", "fullscreen"]:
 		# Browser pointer lock/fullscreen require the press that activates the
 		# control, rather than a later release or deferred scene transition.
 		result.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS

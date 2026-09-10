@@ -1,10 +1,11 @@
 extends RefCounted
 ## Native continuous-time movement and one-shot boost, using imported limits.
 ## Throttle and lateral flight are modern controls; source boost is a timed pulse.
+const Steering = preload("res://src/simulation/player_steering.gd")
 
 
 static func create() -> Dictionary:
-	return {"throttle": 1.0, "boost_remaining": 0.0, "cooldown": 0.0, "contact_elapsed": 0.0}
+	return {"throttle": 1.0, "boost_remaining": 0.0, "cooldown": 0.0, "contact_elapsed": 0.0, "turn": [0.0, 0.0]}
 
 
 static func valid_parameters(value: Variant) -> bool:
@@ -13,7 +14,7 @@ static func valid_parameters(value: Variant) -> bool:
 	for key in ["cruise_speed", "boost_speed", "boost_seconds", "recharge_seconds"]:
 		if not number(value.get(key)) or value[key] <= 0 or value[key] > 100000:
 			return false
-	return value.boost_speed >= value.cruise_speed and preload("res://src/simulation/body_contact.gd").valid_parameters(value.get("contact"))
+	return Steering.valid_parameters(value.get("steering")) and value.boost_speed >= value.cruise_speed and preload("res://src/simulation/body_contact.gd").valid_parameters(value.get("contact"))
 
 
 static func valid(state: Variant, parameters: Dictionary) -> bool:
@@ -23,7 +24,8 @@ static func valid(state: Variant, parameters: Dictionary) -> bool:
 		if not number(state.get(key)) or state[key] < 0:
 			return false
 	return (
-		state.throttle <= 1
+		Steering.valid(state.get("turn"), parameters.steering)
+		and state.throttle <= 1
 		and state.contact_elapsed <= parameters.contact.interval
 		and state.boost_remaining <= parameters.boost_seconds
 		and state.cooldown <= parameters.recharge_seconds

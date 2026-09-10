@@ -263,6 +263,13 @@ func validate_content() -> bool:
 	):
 		error = "Invalid imported player movement. Import the IPA again."
 		return false
+	for ship in ships:
+		var raw_type: String = str(ship[int(content.player_motion.steering.ship_type_column)])
+		var kind := int(raw_type)
+		if not raw_type.is_valid_int() or kind < 0 or kind >= content.player_motion.steering.agilities.size():
+			error = "Unsupported player ship agility type. Import the IPA again."
+			return false
+
 	if (
 		content.get("schema") != 1
 		or not content.has_all(

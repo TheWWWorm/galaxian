@@ -35,6 +35,11 @@ func label_for(key: String) -> String:
 		"aim_assist": "Aim assistance", "linked_fire": "Fire linked weapons",
 		"touch": "Show touch controls", "sensitivity": "Mouse sensitivity",
 		"language": "Language", "fullscreen": "Fullscreen", "aspect_ratio": "Aspect ratio",
+		"flight_overlays": "Show flight text overlays", "extra_flight_buttons": "Show extra flight buttons",
+		"flight_hud": "Flight display",
+		"original_flight_controls": "Original flight controls",
+		"weapons": "Weapon controls",
+		"steering": "Steering settings",
 		"help": library.text(int(data.labels.help))
 	}.get(key, key)
 
@@ -44,9 +49,12 @@ func show_section(page: String, focus_key: String = "") -> void:
 	sliders.clear()
 	var keys: Array = {
 		"options": ["controls", "audio", "display", "language"],
-		"controls": ["invert", "sensitivity", "aim_assist", "linked_fire", "help"],
+		"controls": ["original_flight_controls", "steering", "weapons", "help"],
+		"steering": ["invert", "sensitivity"],
+		"weapons": ["aim_assist", "linked_fire"],
 		"audio": ["effects_volume", "music_volume"],
-		"display": ["fullscreen", "aspect_ratio", "targeting_reticle", "touch"], "help": []
+		"display": ["fullscreen", "aspect_ratio", "flight_hud"],
+		"flight_hud": ["targeting_reticle", "touch", "flight_overlays", "extra_flight_buttons"], "help": []
 	}.get(page, [])
 	if preload("res://src/presentation/bitmap_font.gd").is_mobile():
 		keys.erase("fullscreen")
@@ -63,6 +71,7 @@ func show_section(page: String, focus_key: String = "") -> void:
 	# Original sliders are taller than ordinary rows. Native extra settings must
 	# fit between the logo and footer without overlapping their neighbours.
 	var row_heights: Array[float] = []
+	var row_steps: Array[float] = []
 	var total_height := 0.0
 	for index in entries.size():
 		var key: String = entries[index].action
@@ -72,14 +81,24 @@ func show_section(page: String, focus_key: String = "") -> void:
 		elif values.get(key) is bool:
 			height = maxf(height, option_art.checked.get_height())
 		row_heights.append(height)
-		total_height += maxf(data.row_step, height + 2) if index < entries.size() - 1 else height
-	var row_y := minf(buttons[0].position.y, footer.position.y - 4 - total_height) if not buttons.is_empty() else 0.0
+		row_steps.append(maxf(data.row_step, height + 2) if index < entries.size() - 1 else height)
+		total_height += row_steps.back()
+	var content_top := float(data.logo_y + art.logo.get_height() + 4)
+	var excess := maxf(0, total_height - (footer.position.y - 4 - content_top))
+	# Reduce empty inter-row spacing before allowing a taller slider to push
+	# the first control into the logo. Keep the imported widget sizes intact.
+	for index in maxi(0, row_steps.size() - 1):
+		var reduction := minf(excess, row_steps[index] - row_heights[index] - 2)
+		row_steps[index] -= reduction
+		total_height -= reduction
+		excess -= reduction
+	var row_y := maxf(content_top, minf(buttons[0].position.y, footer.position.y - 4 - total_height)) if not buttons.is_empty() else 0.0
 	var focus_controls: Array[Control] = []
 	for index in entries.size():
 		var key: String = entries[index].action
 		var button: Button = buttons[index]
 		button.position.y = row_y
-		row_y += maxf(data.row_step, row_heights[index] + 2)
+		row_y += row_steps[index]
 		if key in ["music_volume", "effects_volume", "sensitivity"]:
 			var slider := add_slider(button, key, str(entries[index].text))
 			focus_controls.append(slider)
@@ -180,7 +199,7 @@ func update_slider_caption(label: Label, caption: String, key: String, amount: f
 func handle_action(action: String) -> void:
 	if action == "back":
 		back()
-	elif action in ["controls", "audio", "display", "help"]:
+	elif action in ["controls", "audio", "display", "flight_hud", "steering", "weapons", "help"]:
 		show_section(action)
 	elif action == "language":
 		var languages: Array[String] = library.available_languages()
@@ -200,7 +219,9 @@ func handle_action(action: String) -> void:
 func back() -> void:
 	if section == "options":
 		back_requested.emit()
-	elif section == "help":
-		show_section("controls", "help")
+	elif section == "flight_hud":
+		show_section("display", "flight_hud")
+	elif section in ["help", "steering", "weapons"]:
+		show_section("controls", section)
 	else:
 		show_section("options", section)

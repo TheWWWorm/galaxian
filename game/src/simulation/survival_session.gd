@@ -2,7 +2,7 @@ extends "res://src/simulation/session.gd"
 ## Separate arcade state. Campaign inventory, rewards and save slots are untouched.
 const Survival = preload("res://src/simulation/survival.gd")
 const SurvivalLoadout = preload("res://src/simulation/survival_loadout.gd")
-const SAVE_SCHEMA := 10
+const SAVE_SCHEMA := 11
 const MAX_COUNTER := 1000000000
 const MAX_SAFE_INTEGER := 9007199254740991
 var declarations := {}
@@ -457,6 +457,12 @@ func restore(value: Variant) -> bool:
 		value.schema = 10
 		if value.get("motion") is Dictionary:
 			value.motion.contact_elapsed = 0.0
+
+	if value is Dictionary and value.get("schema") == 10:
+		value = value.duplicate(true)
+		value.schema = 11
+		if value.get("motion") is Dictionary:
+			value.motion.turn = [0.0, 0.0]
 
 	if library == null or declarations.is_empty() or not valid_snapshot_header(value):
 		error = "Invalid survival save or different game content."

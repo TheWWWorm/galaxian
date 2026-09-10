@@ -7575,11 +7575,86 @@ func player_motion() -> Dictionary:
 		"boost_speed": immediate_at(boost + 0x20, 3) * 20.0,
 		"boost_seconds": signed_literal(update + 0x9e, 3) / 1000.0,
 		"recharge_seconds": -signed_literal(update + 0xa8, 3) / 1000.0,
-		"contact": player_body_contact()
+		"contact": player_body_contact(),
+		"steering": player_steering()
 	}
 	if not preload("res://src/simulation/flight_motion.gd").valid_parameters(result):
 		fail("Invalid player movement parameters.")
 		return {}
+	return result
+
+
+func player_steering() -> Dictionary:
+	# Read declarations and consumer bindings only. Native turning is an analytic
+	# rate controller, not a transcription of the original per-frame routines.
+	var ctor := symbol_address("__ZN9PlayerEgoC2EP6Player")
+	var left := symbol_address("__ZN9PlayerEgo4leftEif")
+	var right := symbol_address("__ZN9PlayerEgo5rightEif")
+	var up := symbol_address("__ZN9PlayerEgo2upEif")
+	var down := symbol_address("__ZN9PlayerEgo4downEif")
+	var update := symbol_address("__ZN9PlayerEgo6updateEiP18TargetFollowCamera")
+	var sine := symbol_address("__ZN11AbyssEngine6AEMath3SinEi")
+	var globals := symbol_address("__ZN7Globals4initEPN11AbyssEngine18ApplicationManagerEPNS0_6EngineE")
+	var options := symbol_address("__ZN7Globals7optionsE")
+	for pair in [
+		[ctor + 0x148, "__ZN4Ship7getTypeEv"],
+		[update + 0xcc, "__ZN11AbyssEngine6AEMath17MatrixSetRotationERNS0_6MatrixEiii"],
+		[update + 0x1da, "__ZN11AbyssEngine6AEMath17MatrixSetRotationERNS0_6MatrixEiii"],
+		[0x25594, "__ZN4ShipC1EiiiiiiiP5ArrayIiE"],
+		[0x450ca, "__ZN9PlayerEgo4leftEif"], [0x45102, "__ZN9PlayerEgo5rightEif"],
+		[0x454f6, "__ZN9PlayerEgo4downEif"], [0x4551c, "__ZN9PlayerEgo2upEif"]
+	]:
+		if call_target(pair[0]) != symbol_address(pair[1]):
+			fail("Unsupported player steering consumer at %x." % pair[0]); return {}
+	for pair in [
+		[ctor + 0x150, 0x0080], [ctor + 0x152, 0x58c2], [ctor + 0x156, 0x50ca],
+		[left + 0x1a, 0x582e], [left + 0x1e, 0x50ee],
+		[update + 0xc0, 0x5832], [update + 0xc2, 0x6823],
+		[update + 0x1ce, 0x10d2], [update + 0x1d2, 0x011b], [update + 0x1d4, 0x0112],
+		# These cleared flags make the subsequent decay pass apply during held input.
+		[update + 0xc8, 0x2600], [update + 0x1a8, 0x2384],
+		[update + 0x1aa, 0x2588], [update + 0x1ac, 0x50c6], [update + 0x1b0, 0x5146],
+		[globals + 0x3a, 0x609a], [globals + 0x3c, 0x60da],
+		[0x25578, 0x9a1c], [0x5c000, 0x605a], [0x5bd04, 0x6840]
+	]:
+		if u16(pair[0]) != pair[1]:
+			fail("Unsupported player steering declaration at %x." % pair[0]); return {}
+	if literal(globals + 0x34, 3) != options or u32(literal(left + 0x56, 3)) != options:
+		fail("Unsupported player steering preference binding."); return {}
+	var agilities := named_array("__ZL9AGILITIES")
+	if agilities.size() != 4 or literal(ctor + 0x14c, 3) != symbol_address("__ZL9AGILITIES"):
+		fail("Unsupported player agility table."); return {}
+	var helpers := imported_symbols()
+	for address in [0x450c0, 0x450f8, 0x454ec, 0x45512]:
+		if not helpers.get("___mulsf3vfp", []).has(call_target(address)):
+			fail("Unsupported analog steering response."); return {}
+	var limit_scale := literal_float(left + 0x2a, 1)
+	var divisor := immediate_at(left + 0x44, 1)
+	var ceiling := literal_float(left + 0x76, 0)
+	var response_divisor := literal_float(left + 0x7c, 1)
+	for declaration in [[right, 0x26, -1, 0x42, 0x74, 0x7a], [up, 0x2a, -1, 0x44, 0x7e, 0x84], [down, 0x26, 1, 0x42, 0x7c, 0x82]]:
+		var base: int = declaration[0]
+		if (literal_float(base + declaration[1], 1) != limit_scale * declaration[2]
+			or immediate_at(base + declaration[3], 1) != divisor
+			or literal_float(base + declaration[4], 0) != ceiling
+			or literal_float(base + declaration[5], 1) != response_divisor):
+			fail("Conflicting player turn response declarations."); return {}
+	var result := {
+		"agilities": agilities,
+		"ship_type_column": 1,
+		"radians_per_unit": literal_float(sine + 8, 1),
+		"reference_seconds": wreck_drift().get("reference_seconds", 0.0),
+		"limit_scale": limit_scale / float(divisor),
+		"response_ceiling": ceiling, "response_divisor": response_divisor,
+		"default_response": literal_float(globals + 0x36, 2),
+		"release_divisors": [immediate_at(update + 0x208, 1), immediate_at(update + 0x25e, 1)],
+		"bank_scale": float(1 << ((u16(update + 0x1d2) >> 6) & 31)),
+		"pitch_bank_divisor": float(1 << ((u16(update + 0x1ce) >> 6) & 31)),
+		"look_blend": 1.0 / float(1 << ((u16(0x5f7fa) >> 6) & 31)),
+		"position_blend": 1.0 / float(1 << ((u16(0x5f83a) >> 6) & 31))
+	}
+	if not preload("res://src/simulation/player_steering.gd").valid_parameters(result):
+		fail("Invalid supplied player steering declarations."); return {}
 	return result
 
 

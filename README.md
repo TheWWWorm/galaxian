@@ -94,7 +94,18 @@ loss and active-controller disconnect pause the game.
 Options includes sensitivity, inversion, aim assistance, touch controls, linked
 primary firing and separate music/effects volume. Select **Options → Language**
 to cycle through the languages included in your IPA; your choice is saved.
-Remake-specific settings and help currently use English.
+Remake-specific settings and help currently use English. Inversion reverses pitch
+on the Y axis for mouse, controller and touch. Arrow keys keep their direction.
+The previous remake flight controls are the default. Enable **Options → Controls →
+Original flight controls** for reconstructed iPhone-style ship agility, inertia and
+banking. This mode uses imported steering declarations, with adapted mouse input
+and smoothed bank animation; exact iOS handling is still under validation.
+
+Under **Options → Display → Flight display**, disable **Show flight text overlays**
+to hide the added objective, speed/autopilot readout and notifications. Disable
+**Show extra flight buttons** to hide the added bottom action row while keeping
+the original touch controls. Mission dialogue and required confirmations remain
+visible. **Show touch controls** controls all flight action buttons.
 
 On touchscreens, use the centered joystick or drag empty flight space to steer.
 Hold **Fire** to shoot, or **double-tap Fire** to enable autofire. **AUTO** appears
@@ -114,6 +125,13 @@ Each IPA has a separate content identity, cache and saves. Campaign, exploration
 and Survival use separate slots. Checkpoint writes preserve a `.bak` recovery copy;
 failed writes are reported without replacing the last valid save. Previous preview
 pilots remain compatible. Old imported caches may require choosing the IPA again.
+
+**Load / recover** in Pause, or **Load** after defeat, lets you choose the latest
+autosave, the mission/flight start, or the last station. Earlier checkpoints restore
+the entire pilot state and discard subsequent progress. They are preserved when
+in-flight autosaves update. Older saves without these snapshots offer an explicit
+station recovery: repair the ship and reset the unfinished mission while keeping
+the saved inventory and credits, without completion rewards.
 
 Native desktop data lives in the Godot user-data directory named `gof1-remake`
 (`~/.local/share/gof1-remake/` on Linux). Android uses private application storage;

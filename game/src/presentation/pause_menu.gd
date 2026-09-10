@@ -29,12 +29,12 @@ func show_root() -> void:
 		{"text": "Save pilot", "action": "save", "enabled": can_save},
 		{"text": library.text(int(labels.menu)), "action": "menu",
 			"hint": "Save your pilot and return to the main menu." if can_save else "Return to the main menu."}
-	], "Abandon run", "abandon")
-	footer.visible = survival
+	], "Abandon run" if survival else "Load / recover", "abandon" if survival else "load")
+	footer.visible = survival or can_save
 	var focusable: Array[Control] = []
 	for button in buttons:
 		if not button.disabled: focusable.append(button)
-	if survival: focusable.append(footer)
+	if footer.visible: focusable.append(footer)
 	for index in focusable.size():
 		var control: Control = focusable[index]
 		control.focus_neighbor_top = control.get_path_to(focusable[posmod(index - 1, focusable.size())])
@@ -53,6 +53,8 @@ func handle_action(action: String) -> void:
 				show_choice("Abandon this run? This ends the run without recording a high score.", ["Abandon", library.text(int(library.content.briefing_ui.labels.back))], "abandon")
 		"save":
 			if can_save: selected.emit(action)
+		"load":
+			if can_save and not survival: selected.emit(action)
 		"resume", "options", "menu": selected.emit(action)
 
 

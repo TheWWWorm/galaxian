@@ -2,7 +2,7 @@ extends RefCounted
 ## Campaign completion, skipping, and exploration are distinct saved states.
 ## Imported scenarios drive the native mission state; unsupported chapters remain
 ## unavailable until their behavior has been reconstructed and verified.
-const SCHEMA := 28
+const SCHEMA := 29
 const BodyContact = preload("res://src/simulation/body_contact.gd")
 const PilotStatistics = preload("res://src/simulation/pilot_statistics.gd")
 const ExplorationArea = preload("res://src/simulation/exploration_area.gd")
@@ -42,6 +42,7 @@ var active_job := {}
 var exploration := {}
 var contract_rewards: Array = []
 var recovery := {}
+var checkpoints := {}
 var _contract_definition := {}
 var motion := Motion.create()
 var combat := Combat.create()
@@ -79,6 +80,7 @@ func configure(data, skip: bool = false) -> void:
 	exploration = {}
 	contract_rewards = []
 	recovery = {}
+	checkpoints = {}
 	_contract_definition = {}
 	motion = Motion.create()
 	combat = Combat.create()
@@ -101,6 +103,7 @@ func skip_campaign() -> void:
 	campaign_state = "skipped"
 	slot = "free"
 	active_job = {}
+	checkpoints = {}
 	_contract_definition = {}
 	markets.clear()
 	# No completion flag, money or equipment rewards are granted for skipping.
@@ -166,6 +169,7 @@ func begin_mission() -> bool:
 	if loadout.weapons().is_empty():
 		error = "Fit a weapon before starting this mission."
 		return false
+	remember_checkpoint("station")
 	active_job = Mission.create(
 		mission_definition(),
 		chapter,
@@ -180,6 +184,7 @@ func begin_mission() -> bool:
 	docked = false
 	flight_position = Vector3.ZERO
 	flight_rotation = Vector3.ZERO
+	remember_checkpoint("departure")
 	return true
 
 
@@ -412,6 +417,7 @@ func begin_contract(index: int) -> bool:
 	if definition.success.kind != "route_finished" and loadout.weapons().is_empty():
 		error = "Fit a weapon before accepting this contract."
 		return false
+	remember_checkpoint("station")
 	_contract_definition = definition
 	active_job = Mission.create(
 		definition,
@@ -429,6 +435,7 @@ func begin_contract(index: int) -> bool:
 	docked = false
 	flight_position = Vector3.ZERO
 	flight_rotation = Vector3.ZERO
+	remember_checkpoint("departure")
 	return true
 
 
@@ -442,8 +449,10 @@ func depart() -> bool:
 		return false
 	if not exploration_unlocked():
 		return begin_mission()
+	remember_checkpoint("station")
 	motion = Motion.create()
 	docked = false
+	remember_checkpoint("departure")
 	return true
 
 
@@ -918,6 +927,12 @@ func restore(value: Variant) -> bool:
 		if value.get("motion") is Dictionary:
 			value.motion.contact_elapsed = 0.0
 
+	if value is Dictionary and value.get("schema") == 28:
+		value = value.duplicate(true)
+		value.schema = 29
+		if value.get("motion") is Dictionary:
+			value.motion.turn = [0.0, 0.0]
+
 	if (
 		not value is Dictionary
 		or value.get("schema") != SCHEMA
@@ -1306,6 +1321,12 @@ func restore(value: Variant) -> bool:
 	weapon_id = int(weapon_id)
 	flight_position = Vector3(value.position[0], value.position[1], value.position[2])
 	flight_rotation = Vector3(value.rotation[0], value.rotation[1], value.rotation[2])
+	checkpoints = {}
+	if value.get("checkpoints") is Dictionary:
+		for key in ["station", "departure"]:
+			var point: Variant = value.checkpoints.get(key)
+			if point is Dictionary and not point.has("checkpoints"):
+				checkpoints[key] = point.duplicate(true)
 	return true
 
 
@@ -1454,7 +1475,10 @@ func save(path: String) -> bool:
 	if f == null:
 		error = "Could not write save."
 		return false
-	f.store_string(JSON.stringify(capture()))
+	if docked and can_retry(): remember_checkpoint("station")
+	var payload := capture()
+	payload["checkpoints"] = checkpoints.duplicate(true)
+	f.store_string(JSON.stringify(payload))
 	f.flush()
 	f.close()
 	if FileAccess.file_exists(path) and DirAccess.copy_absolute(path, path + ".bak") != OK:
@@ -1464,6 +1488,26 @@ func save(path: String) -> bool:
 		error = "Could not finish save."
 		return false
 	return true
+
+
+func remember_checkpoint(kind: String) -> void:
+	if slot == "survival" or not can_retry(): return
+	if kind == "station": checkpoints.erase("departure")
+	checkpoints[kind] = capture()
+
+
+func checkpoint_candidate(kind: String):
+	if kind not in ["station", "departure"]: return null
+	var value: Variant = checkpoints.get(kind)
+	if not value is Dictionary or value.get("slot") != slot or value.has("checkpoints"): return null
+	var candidate = get_script().new()
+	candidate.configure(library, slot == "free")
+	if not candidate.restore(value) or not candidate.can_retry(): return null
+	if candidate.docked != (kind == "station"): return null
+	# Retain station recovery on a mission restart; discard later flight history.
+	for key in ["station", "departure"] if kind == "departure" else ["station"]:
+		if checkpoints.has(key): candidate.checkpoints[key] = checkpoints[key].duplicate(true)
+	return candidate
 
 
 func can_retry() -> bool:
