@@ -1,5 +1,6 @@
 extends Node3D
 signal dock_requested
+signal pause_requested
 signal defeated
 signal mission_failed
 signal mission_completed
@@ -64,6 +65,9 @@ var rng := RandomNumberGenerator.new()
 var settings := {"sensitivity": .0025, "invert": false, "aim_assist": true}
 var audio := preload("res://src/presentation/audio_settings.gd").effect_player()
 var capture_button_held := false
+var web_mouse_input := OS.has_feature("web")
+var mouse_flight_enabled := false
+var web_lock_observed := false
 var laser_sound: AudioStreamWAV
 var ambience := Node3D.new()
 var checkpoint_elapsed := 0.0
@@ -213,7 +217,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		capture_mouse()
 		get_viewport().set_input_as_handled()
 		return
-	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+	if (
+		event is InputEventMouseMotion and mouse_steering_enabled()
+		and event.device != InputEvent.DEVICE_ID_EMULATION
+	):
 		ship.rotate_y(-event.relative.x * float(settings.sensitivity))
 		ship.rotate_object_local(
 			Vector3.RIGHT,
@@ -238,7 +245,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				first_person = not first_person
 				ship.visible = not first_person
 			KEY_TAB:
-				if mouse_is_captured(): Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+				if mouse_flight_enabled or mouse_is_captured(): release_mouse()
 				else: capture_mouse()
 	if event is InputEventJoypadButton and event.pressed:
 		match event.button_index:
@@ -311,6 +318,7 @@ func try_dock() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	watch_browser_capture()
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT): capture_button_held = false
 	if library == null or paused:
 		return
@@ -457,7 +465,7 @@ func step(dt: float) -> void:
 		if (
 			(
 				Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
-				and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+				and mouse_steering_enabled()
 				and not capture_button_held
 			)
 			or Input.is_physical_key_pressed(KEY_SPACE)
@@ -1229,7 +1237,7 @@ func pause(value: bool) -> void:
 	controls.clear()
 	time_factor = 1
 	if value or settings.get("touch", false):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		release_mouse()
 	else:
 		capture_mouse()
 
@@ -1241,7 +1249,37 @@ func mouse_is_captured() -> bool:
 	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 
+func mouse_steering_enabled() -> bool:
+	if settings.get("touch", false):
+		return false
+	# Some browsers reject recapture after Escape, even from Resume. Keep
+	# canvas motion usable while waiting for a fresh capture gesture.
+	return mouse_flight_enabled if web_mouse_input else Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+
+
+func watch_browser_capture() -> void:
+	if not web_mouse_input or paused or not mouse_flight_enabled:
+		return
+	var captured := mouse_is_captured()
+	if web_lock_observed and not captured:
+		# Escape's default browser action can swallow the key event. An actual
+		# locked -> unlocked transition must still pause, once. Failed initial
+		# requests and deliberate releases (Tab/menus/touch) do not enter here.
+		pause(true)
+		pause_requested.emit()
+		return
+	web_lock_observed = captured
+
+
+func release_mouse() -> void:
+	mouse_flight_enabled = false
+	web_lock_observed = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
 func capture_mouse() -> void:
+	mouse_flight_enabled = true
+	web_lock_observed = false
 	if OS.has_feature("web"):
 		capture_button_held = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE

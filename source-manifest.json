@@ -205,6 +205,8 @@
     "game/tests/integration.gd.uid",
     "game/tests/web_display.gd",
     "game/tests/web_display.gd.uid",
+    "game/tests/web_mouse.gd",
+    "game/tests/web_mouse.gd.uid",
     "game/web/GODOT_LICENSE.txt",
     "game/web/shell.html",
     "source-manifest.json",
