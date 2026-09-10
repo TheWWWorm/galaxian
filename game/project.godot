@@ -1,0 +1,32 @@
+config_version=5
+
+[application]
+config/name="Galaxy on Fire — Native Remake"
+config/icon="res://icon.svg"
+config/version="1.0.0"
+run/main_scene="res://scenes/main.tscn"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="gof1-remake"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+boot_splash/show_image=false
+
+[display]
+window/size/viewport_width=1440
+window/size/viewport_height=900
+window/size/window_width_override=1280
+window/size/window_height_override=800
+window/size/min_width=960
+window/size/min_height=640
+window/stretch/mode="canvas_items"
+window/handheld/orientation=0
+
+[rendering]
+textures/vram_compression/import_etc2_astc=true
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+anti_aliasing/quality/msaa_3d=2
+environment/defaults/default_clear_color=Color(0.004, 0.009, 0.024, 1)
+
+[input_devices]
+pointing/emulate_mouse_from_touch=true

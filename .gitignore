@@ -1,0 +1,14 @@
+.godot/
+*.tmp
+*.log
+*.ipa
+*.jar
+*.pck
+*.zip
+*.x86_64
+*.exe
+# The deployable engine pack must accompany public/ in a hosting checkout.
+!public/index.pck
+.wrangler/
+node_modules/
+__pycache__/
