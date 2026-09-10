@@ -34,7 +34,7 @@ func label_for(key: String) -> String:
 	return {
 		"aim_assist": "Aim assistance", "linked_fire": "Fire linked weapons",
 		"touch": "Show touch controls", "sensitivity": "Mouse sensitivity",
-		"fullscreen": "Fullscreen", "aspect_ratio": "Aspect ratio",
+		"language": "Language", "fullscreen": "Fullscreen", "aspect_ratio": "Aspect ratio",
 		"help": library.text(int(data.labels.help))
 	}.get(key, key)
 
@@ -43,7 +43,7 @@ func show_section(page: String, focus_key: String = "") -> void:
 	entries.clear()
 	sliders.clear()
 	var keys: Array = {
-		"options": ["controls", "audio", "display"],
+		"options": ["controls", "audio", "display", "language"],
 		"controls": ["invert", "sensitivity", "aim_assist", "linked_fire", "help"],
 		"audio": ["effects_volume", "music_volume"],
 		"display": ["fullscreen", "aspect_ratio", "targeting_reticle", "touch"], "help": []
@@ -53,6 +53,8 @@ func show_section(page: String, focus_key: String = "") -> void:
 	for key in keys:
 		var caption_key: String = {"music_volume": "music", "effects_volume": "effects"}.get(key, key)
 		var caption := label_for(caption_key)
+		if key == "language":
+			caption += ": " + library.language_name(library.language_code)
 		if key == "aspect_ratio":
 			var ratio: String = values.get(key, "auto")
 			caption += ": " + ("Auto" if ratio == "auto" else ratio)
@@ -180,6 +182,10 @@ func handle_action(action: String) -> void:
 		back()
 	elif action in ["controls", "audio", "display", "help"]:
 		show_section(action)
+	elif action == "language":
+		var languages: Array[String] = library.available_languages()
+		if not languages.is_empty():
+			setting_changed.emit("language", languages[(languages.find(library.language_code) + 1) % languages.size()])
 	elif action == "aspect_ratio":
 		var ratios: Array = preload("res://src/presentation/display_settings.gd").RATIOS.keys()
 		values[action] = ratios[(ratios.find(values.get(action, "auto")) + 1) % ratios.size()]

@@ -92,9 +92,16 @@ autopilot. Hostiles, damage or approaching a destination return it to 1×. Focus
 loss and active-controller disconnect pause the game.
 
 Options includes sensitivity, inversion, aim assistance, touch controls, linked
-primary firing and separate music/effects volume. On touchscreens, use the joystick
-or drag empty flight space to steer. Android Back pauses/resumes flight or returns
-from a menu. Full key remapping is not implemented.
+primary firing and separate music/effects volume. Select **Options → Language**
+to cycle through the languages included in your IPA; your choice is saved.
+Remake-specific settings and help currently use English.
+
+On touchscreens, use the centered joystick or drag empty flight space to steer.
+Hold **Fire** to shoot, or **double-tap Fire** to enable autofire. **AUTO** appears
+on the fire button while enabled; tap Fire once to stop. Pausing clears autofire.
+Touch instructions appear first under **Options → Controls → Help** when touch
+controls are enabled. Android Back pauses/resumes flight or returns from a menu.
+Full key remapping is not implemented.
 
 Under **Options → Display**, toggle **Fullscreen** or choose an **Aspect ratio**.
 **Auto** fills your browser or resizable window; fixed ratios preserve the picture

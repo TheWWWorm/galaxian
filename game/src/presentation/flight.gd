@@ -221,12 +221,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		event is InputEventMouseMotion and mouse_steering_enabled()
 		and event.device != InputEvent.DEVICE_ID_EMULATION
 	):
-		ship.rotate_y(-event.relative.x * float(settings.sensitivity))
-		ship.rotate_object_local(
-			Vector3.RIGHT,
-			-event.relative.y * float(settings.sensitivity) * (-1 if settings.invert else 1)
-		)
-		ship.transform.basis = ship.transform.basis.orthonormalized()
+		steer(-event.relative.x * float(settings.sensitivity),
+			-event.relative.y * float(settings.sensitivity) * (-1 if settings.invert else 1))
 		if event.relative.length() > 2:
 			auto_pilot = false
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -257,6 +253,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				toggle_autopilot()
 			JOY_BUTTON_RIGHT_SHOULDER:
 				cycle_time()
+
+
+func steer(yaw: float, pitch: float) -> void:
+	# Both axes follow the cockpit, including beyond vertical and upside down.
+	ship.rotate_object_local(Vector3.UP, yaw)
+	ship.rotate_object_local(Vector3.RIGHT, pitch)
+	ship.basis = ship.basis.orthonormalized()
 
 
 func cinematic_locked() -> bool:
@@ -432,9 +435,7 @@ func step(dt: float) -> void:
 				if session.active_job.is_empty() or session.active_job.get("ready", false):
 					auto_pilot = false
 		else:
-			ship.rotate_y(yaw * dt * 1.2)
-			ship.rotate_object_local(Vector3.RIGHT, pitch * dt * 1.2)
-			ship.basis = ship.basis.orthonormalized()
+			steer(yaw * dt * 1.2, pitch * dt * 1.2)
 		var boost_down: bool = (
 			Input.is_physical_key_pressed(KEY_SHIFT) or pad.boost or controls.touch_boost
 		)

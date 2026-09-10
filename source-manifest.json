@@ -201,6 +201,8 @@
     "game/src/simulation/travel.gd.uid",
     "game/src/simulation/tutorial.gd",
     "game/src/simulation/tutorial.gd.uid",
+    "game/tests/control_regressions.gd",
+    "game/tests/control_regressions.gd.uid",
     "game/tests/integration.gd",
     "game/tests/integration.gd.uid",
     "game/tests/web_display.gd",

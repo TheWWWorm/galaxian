@@ -15,7 +15,10 @@ var stick_center := Vector2.ZERO
 var stick_finger := -1
 var stick_vector := Vector2.ZERO
 var action_fingers := {}
+var drag_finger := -1
+var drag_origin := Vector2.ZERO
 var reticle := TextureRect.new()
+var autofire_label := Label.new()
 var radar_art := {}
 var objective: Dictionary
 var targets: Array[Dictionary] = []
@@ -85,6 +88,8 @@ func create_marker(color: Color, navigation: bool) -> Dictionary:
 func _process(_delta: float) -> void:
 	if flight == null or not is_instance_valid(flight):
 		return
+	if flight.paused or flight.cinematic_locked() or not touch_enabled:
+		reset_touch()
 	if not survival_rules.is_empty():
 		var director: Dictionary = flight.session.active_job.survival
 		SurvivalFeedback.advance(
@@ -99,6 +104,7 @@ func _process(_delta: float) -> void:
 			if int(flight.library.items[id][1]) == flight.library.MISSILE_CATEGORY:
 				missile_available = missile_available or flight.session.weapon_enabled(id)
 		buttons.missiles.visible = touch_enabled and missile_available
+	autofire_label.visible = touch_enabled and flight.controls.touch_autofire
 	queue_redraw()
 	var active: bool = not flight.paused and not flight.session.active_job.get("ready", false)
 	reticle.visible = active
@@ -256,7 +262,7 @@ func setup_artwork() -> void:
 		var control := TextureButton.new()
 		control.ignore_texture_size = true
 		control.stretch_mode = TextureButton.STRETCH_SCALE
-		control.tooltip_text = action.capitalize()
+		control.tooltip_text = "Hold to fire. Double-tap for autofire; tap again to stop." if action == "fire" else action.capitalize()
 		control.visible = touch_enabled
 		if action == "fire":
 			# The source overlays the luminous disk beneath the permanent fire frame.
@@ -271,6 +277,17 @@ func setup_artwork() -> void:
 			)
 		add_child(control)
 		buttons[action] = control
+	autofire_label.text = "AUTO"
+	autofire_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	autofire_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	autofire_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	autofire_label.add_theme_font_override("font", preload("res://src/presentation/bitmap_font.gd").create(flight.library))
+	autofire_label.add_theme_color_override("font_color", Color.WHITE)
+	autofire_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	autofire_label.add_theme_constant_override("shadow_offset_x", 1)
+	autofire_label.add_theme_constant_override("shadow_offset_y", 1)
+	autofire_label.hide()
+	add_child(autofire_label)
 	resized.connect(layout_artwork)
 	layout_artwork()
 
@@ -284,7 +301,11 @@ func layout_artwork() -> void:
 	stick_origin = Vector2(
 		layout.stick_left, extent.y - art.stick_frame.get_height() - layout.stick_bottom
 	)
-	stick_center = stick_origin + art.stick_frame.get_size() * .5
+	# The frame's ring is asymmetric within its atlas rectangle. The original
+	# draw places the frame three texels below its constructor's touch origin.
+	# Account for that offset and the half-texel center of the ring's pixels.
+	var pivot: float = (art.stick_frame.get_width() - art.stick_normal.get_width()) * 2.0
+	stick_center = stick_origin + Vector2(pivot + .5, pivot - 3.5)
 	var centers := {
 		"pause": Vector2(extent.x - layout.pause_right, layout.pause_top),
 		"fire": Vector2(extent.x - layout.fire_right, extent.y - layout.fire_bottom),
@@ -300,6 +321,9 @@ func layout_artwork() -> void:
 		control.size = dimensions * factor
 		# Keep the full modern hit rectangle inside safe viewport edges.
 		control.position = control.position.clamp(Vector2.ZERO, size - control.size)
+	autofire_label.position = buttons.fire.position
+	autofire_label.size = buttons.fire.size
+	autofire_label.add_theme_font_size_override("font_size", maxi(8, roundi(12 * factor)))
 	queue_redraw()
 
 
@@ -378,7 +402,7 @@ func bitmap(value: String, point: Vector2, width: float = INF) -> void:
 	preload("res://src/presentation/bitmap_font.gd").draw_text(self, flight.library, value, point, width)
 
 func _input(event: InputEvent) -> void:
-	if flight == null or flight.paused or not visible:
+	if flight == null or flight.paused or not visible or not touch_enabled:
 		return
 	var actions: Dictionary = buttons.duplicate()
 	actions.merge(extra_buttons)
@@ -389,15 +413,26 @@ func _input(event: InputEvent) -> void:
 			if control.is_visible_in_tree() and control.get_global_rect().has_point(event.position):
 				get_viewport().set_input_as_handled()
 				return
+	if (event is InputEventScreenDrag or event is InputEventScreenTouch) and event.index == drag_finger:
+		if event is InputEventScreenTouch and not event.pressed:
+			drag_finger = -1
+			flight.controls.touch_look = Vector2.ZERO
+		elif event is InputEventScreenDrag:
+			flight.controls.touch_look = ((event.position - drag_origin) / (float(flight.library.content.flight_ui.artwork.layout.stick_radius) * factor)).limit_length()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventScreenTouch:
 		if not event.pressed and action_fingers.has(event.index):
 			var action: String = action_fingers[event.index]
 			var control: BaseButton = actions[action]
 			action_fingers.erase(event.index)
 			control.set_pressed_no_signal(false)
+			var completed: bool = not event.canceled and control.is_visible_in_tree() and control.get_global_rect().has_point(event.position)
+			if action == "fire" and not completed:
+				flight.controls.clear_touch_fire()
 			control.button_up.emit()
 			get_viewport().set_input_as_handled()
-			if control.is_visible_in_tree() and control.get_global_rect().has_point(event.position):
+			if completed:
 				control.pressed.emit()
 			return
 		if event.pressed:
@@ -413,10 +448,13 @@ func _input(event: InputEvent) -> void:
 						control.button_down.emit()
 					get_viewport().set_input_as_handled()
 					return
+		if flight.cinematic_locked():
+			return
 		if (
 			touch_enabled
 			and event.pressed
 			and stick_finger < 0
+			and drag_finger < 0
 			and Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(
 				event.position
 			)
@@ -442,8 +480,39 @@ func _input(event: InputEvent) -> void:
 		)
 		. limit_length()
 	)
+	if stick_vector.length() < .08:
+		stick_vector = Vector2.ZERO
 	flight.controls.touch_look = stick_vector
 	get_viewport().set_input_as_handled()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Empty-space steering reaches here only after buttons and modal UI had their
+	# chance to consume it. It shares ownership with the fixed stick above.
+	if flight == null or flight.paused or flight.cinematic_locked() or not visible or not touch_enabled:
+		return
+	if event is InputEventScreenTouch and event.pressed:
+		if stick_finger < 0 and drag_finger < 0:
+			drag_finger = event.index
+			drag_origin = event.position
+			flight.controls.touch_look = Vector2.ZERO
+		get_viewport().set_input_as_handled()
+
+
+func reset_touch() -> void:
+	stick_finger = -1
+	drag_finger = -1
+	stick_vector = Vector2.ZERO
+	for control: BaseButton in buttons.values():
+		control.set_pressed_no_signal(false)
+	for control: BaseButton in extra_buttons.values():
+		control.set_pressed_no_signal(false)
+	action_fingers.clear()
+	flight.controls.touch_look = Vector2.ZERO
+	flight.controls.clear_touch_fire()
+	flight.controls.touch_boost = false
+	flight.controls.touch_missiles = false
+	flight.controls.touch_throttle = 0.0
 
 
 func draw_radar_frame(extent: Vector2) -> void:

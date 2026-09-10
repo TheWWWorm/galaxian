@@ -13921,7 +13921,7 @@ func check_survival_radar(source: PackedByteArray, lib) -> void:
 	var decl:={"rules":reader.survival_rules(),"setup":reader.survival_setup(),"armament":reader.survival_armament(),"motion":reader.interceptor_combat().get("motion",{}),"hud":hud_rules}
 	var state:=Arcade.new();check(state.configure_survival(lib,decl,0,0,47),"Configure survival radar fixture")
 	var flight:=Flight.new();root.add_child(flight);flight.setup(lib,state,{},true);flight.set_physics_process(false)
-	var hud:=Hud.new();hud.flight=flight;root.add_child(hud);hud.size=Vector2(960,640);hud.set_process(false)
+	var hud:=Hud.new();hud.flight=flight;root.add_child(hud);hud.size=root.get_visible_rect().size;hud.set_process(false)
 	for pair in [[0,"weak"],[2,"weak"],[3,"medium"],[5,"medium"],[6,"strong"],[8,"strong"]]:
 		check(hud.marker_kind("enemy",{"archetype":pair[0]})==pair[1],"HUD strength boundary %d selects %s artwork"%pair)
 	check(hud.marker_kind("ally",{"archetype":0})=="ally","Friendly target retains friendly marker regardless of survival strength")
@@ -22123,7 +22123,7 @@ func check_options_menu(source: PackedByteArray, lib) -> void:
 	app.show_options()
 	var panel = app.options_panel
 	check(root.gui_get_focus_owner() == panel.buttons[0], "Options initially focuses its first category rather than Back")
-	check(panel != null and not app.page.visible and panel.entries.map(func(row): return row.action) == ["controls", "audio", "display"], "Installed content replaces generic Options with original menu categories")
+	check(panel != null and not app.page.visible and panel.entries.map(func(row): return row.action) == ["controls", "audio", "display", "language"], "Installed content exposes original menu categories and language selection")
 	panel.handle_action("audio")
 	check(panel.sliders.size() == 2 and panel.buttons.all(func(button): return button.focus_mode == Control.FOCUS_NONE), "Audio rows expose keyboard-focusable sliders without duplicate buttons")
 	panel.sliders.music_volume.value = 35

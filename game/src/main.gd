@@ -63,6 +63,7 @@ var ready_content := false
 var busy := false
 var paused := false
 var settings := {
+	"language": "gb",
 	"sensitivity": .0025,
 	"invert": false,
 	"aim_assist": true,
@@ -87,8 +88,6 @@ var auto_exit := false
 var exiting := false
 var transient_preview := false
 var web_picker
-var touch_finger := -1
-var touch_origin := Vector2.ZERO
 
 
 func _init() -> void:
@@ -760,9 +759,10 @@ func activate_content() -> bool:
 		session = null
 	survival_archive = null
 	survival_name_draft = ""
-	var lang := (
-		"gb" if importer.metadata.languages.has("gb") else str(importer.metadata.languages[0])
-	)
+	var languages: Array = importer.metadata.languages
+	var lang := str(settings.language)
+	if not languages.has(lang):
+		lang = "gb" if languages.has("gb") else str(languages[0])
 	ready_content = library.open(importer.root, importer.content_id, lang)
 	if not ready_content:
 		return false
@@ -1190,8 +1190,8 @@ func show_flight_hud() -> void:
 	flight_buttons = hud.buttons.duplicate()
 	flight_buttons.boost.button_down.connect(func(): flight.controls.touch_boost = true)
 	flight_buttons.boost.button_up.connect(func(): flight.controls.touch_boost = false)
-	flight_buttons.fire.button_down.connect(func(): flight.controls.touch_fire = true)
-	flight_buttons.fire.button_up.connect(func(): flight.controls.touch_fire = false)
+	flight_buttons.fire.button_down.connect(flight.controls.press_touch_fire)
+	flight_buttons.fire.button_up.connect(flight.controls.release_touch_fire)
 	flight_buttons.weapon.pressed.connect(func(): session.cycle_weapon())
 	flight_buttons.missiles.button_down.connect(func(): flight.controls.touch_missiles = true)
 	flight_buttons.missiles.button_up.connect(func(): flight.controls.touch_missiles = false)
@@ -1273,7 +1273,7 @@ func update_tutorial_controls() -> void:
 		var highlighted: bool = cue.get("action") == action and cue.get("lit", false)
 		if action == "fire":
 			control.self_modulate.a = (
-				1.0 if control.is_pressed() or flight.controls.touch_fire or highlighted else 0.0
+				1.0 if control.is_pressed() or flight.controls.touch_fire or flight.controls.touch_autofire or highlighted else 0.0
 			)
 		else:
 			control.texture_normal = library.ui_image(
@@ -1396,16 +1396,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			show_pause()
 		elif screen == "pause":
 			navigate_back()
-	if screen == "flight" and settings.touch and flight != null:
-		if event is InputEventScreenTouch:
-			if event.pressed and touch_finger < 0:
-				touch_finger = event.index
-				touch_origin = event.position
-			elif event.index == touch_finger:
-				touch_finger = -1
-				flight.controls.touch_look = Vector2.ZERO
-		elif event is InputEventScreenDrag and event.index == touch_finger:
-			flight.controls.touch_look = ((event.position - touch_origin) / 90).limit_length()
 
 
 func show_map() -> void:
@@ -1649,7 +1639,15 @@ func close_options() -> void:
 
 
 func change_option(key: String, value: Variant) -> void:
-	if key == "fullscreen" and value is bool:
+	if key == "language" and value is String and ready_content:
+		if not library.set_language(value):
+			notify(library.error)
+			return
+		settings.language = value
+		if is_instance_valid(options_panel):
+			options_panel.values.language = value
+			options_panel.show_section(options_panel.section, "language")
+	elif key == "fullscreen" and value is bool:
 		DisplaySettings.set_fullscreen(get_window(), value)
 		settings.fullscreen = value
 	elif key == "aspect_ratio" and value is String and DisplaySettings.RATIOS.has(value):
@@ -1995,7 +1993,9 @@ func acknowledge_recovery() -> void:
 
 
 func controls_help() -> String:
-	return "W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nEsc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses.\n\nTouch: drag empty space to steer; use the on-screen actions."
+	var other := "W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nEsc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses."
+	var touch := "Touch: use the centered stick or drag empty space to steer. Hold Fire to shoot; double-tap Fire to enable autofire. Tap Fire once to stop. AUTO appears on the fire button while enabled. Pausing clears autofire."
+	return touch + "\n\n" + other if settings.touch else other + "\n\n" + touch
 
 
 func setup_menu_input() -> void:

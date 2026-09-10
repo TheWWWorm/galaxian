@@ -114,6 +114,35 @@ func open(directory: String, content_id: String, language: String = "gb") -> boo
 	)
 
 
+func available_languages() -> Array[String]:
+	var result: Array[String] = []
+	for filename in DirAccess.get_files_at(root):
+		if filename.ends_with(".lang"):
+			result.append(filename.trim_suffix(".lang"))
+	result.sort()
+	return result
+
+
+static func language_name(code: String) -> String:
+	return {"gb": "English", "de": "Deutsch", "es": "Español",
+		"fr": "Français", "it": "Italiano"}.get(code, code.to_upper())
+
+
+func set_language(code: String) -> bool:
+	if not available_languages().has(code):
+		error = "This language is not included in the imported game."
+		return false
+	var localized := reader.language(read(code + ".lang"))
+	if localized.size() != strings.size():
+		error = "The selected language data is incomplete. Import the IPA again."
+		return false
+	strings = localized
+	language_code = code
+	radio_lines_cache.clear()
+	error = ""
+	return true
+
+
 func valid_menu_traffic() -> bool:
 	if not preload("res://src/presentation/menu_traffic.gd").valid_data(
 		content.get("menu_traffic"), content.tables.actor_meshes.size()
