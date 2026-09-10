@@ -164,7 +164,10 @@ func run() -> void:
 	check(not source.finish_mission(), "Completion waits for the closing radio transmission")
 	drain_radio(source)
 	flight.step(1.0 / 60.0)
-	check(flight.paused, "Mission simulation stops at objective completion")
+	check(flight.outro_active and not flight.paused, "Mission success continues its cosmetic departure")
+	flight.advance_outro(float(lib.content.flight_effects.outro.settle_seconds))
+	flight.step(1.0 / 60.0)
+	check(flight.paused, "Mission settlement waits for the source closing transition")
 	check(
 		source.finish_mission() and source.station_id == lib.chapter_destination(0),
 		"Training completion transfers to its imported station"
@@ -13766,7 +13769,7 @@ func check_survival_hud(source: PackedByteArray, lib) -> void:
 	hud._process(0)
 	check(hud.buttons.missiles.visible and not hud.objective.node.visible,"Survival shows unlocked touch missile control and hides campaign objective marker")
 	pilot.active_job.survival.score=0;hud._process(0)
-	check(not hud.buttons.missiles.visible,"Touch missile control follows same availability rule")
+	check(hud.buttons.missiles.visible and is_equal_approx(hud.buttons.missiles.self_modulate.a, 50.0 / 255),"Locked Survival missile stays visible at the source unavailable opacity")
 	pilot.active_job.survival.score=200;pilot.elapsed=.1;hud._process(0)
 	var feedback:Dictionary=pilot.hud_feedback.duplicate(true)
 	hud.free();hud=Hud.new();hud.flight=flight;root.add_child(hud);hud.size=Vector2(960,640);hud._process(0)
@@ -19628,7 +19631,7 @@ func check_menu_scene(source: PackedByteArray, lib) -> void:
 	var actor := int(lib.content.tables.buyable_ships[0])
 	check(
 		(
-			data.local_trail.style == 1
+			data.local_trail.style == 2
 			and data.local_trail.segments == 40
 			and is_equal_approx(data.trail_seconds, .08)
 		),
@@ -22020,7 +22023,7 @@ func check_pause_menu(source: PackedByteArray, lib) -> void:
 	var captured: Dictionary = app.session.capture()
 	app.show_pause()
 	var panel = app.pause_panel
-	check(panel != null and app.flight.paused and not app.page.visible and panel.buttons.size() == 5, "Original pause artwork replaces generic controls without advancing flight")
+	check(panel != null and app.flight.paused and not app.page.visible and panel.buttons.size() == 6, "Original pause artwork replaces generic controls without advancing flight")
 	check(panel.buttons[0].text == lib.text(20) and root.gui_get_focus_owner() == panel.buttons[0] and panel.footer.visible and panel.footer.text == "Load / recover", "Continue Game is initially focused and campaign exposes recovery")
 	panel.handle_action("help")
 	check(panel.section == "help" and app.flight.paused, "Pause help stays within the paused original-art screen")
@@ -22056,7 +22059,7 @@ func check_pause_menu(source: PackedByteArray, lib) -> void:
 	app.flight.set_physics_process(false)
 	app.transient_preview = true
 	app.show_pause()
-	check(app.pause_panel.buttons[3].disabled and not app.pause_panel.buttons[4].disabled, "Transient preview cannot save but can leave through Main menu")
+	check(app.pause_panel.buttons[4].disabled and not app.pause_panel.buttons[5].disabled, "Transient preview cannot save but can leave through Main menu")
 	app.pause_panel.handle_action("menu")
 	check(app.screen == "title", "Transient preview leaves pause without creating a pilot save")
 	var arcade_panel = preload("res://src/presentation/pause_menu.gd").new()

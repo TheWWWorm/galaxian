@@ -44,6 +44,7 @@ var destination_panel
 var travel_transition
 var hangar_panel
 var options_panel
+var action_freeze_panel
 var pause_panel
 var defeat_panel
 var defeat_notice := false
@@ -257,6 +258,13 @@ func button(text: String, callback: Callable, parent: Node, enabled: bool = true
 
 
 func clear_page() -> void:
+	if is_instance_valid(action_freeze_panel):
+		action_freeze_panel.restore_scene()
+		action_freeze_panel.hide()
+		action_freeze_panel.process_mode = Node.PROCESS_MODE_DISABLED
+		action_freeze_panel.set_process_input(false)
+		action_freeze_panel.queue_free()
+	action_freeze_panel = null
 	if is_instance_valid(defeat_panel):
 		defeat_panel.hide()
 		defeat_panel.set_process_input(false)
@@ -1377,6 +1385,7 @@ func show_pause() -> void:
 func pause_action(action: String) -> void:
 	match action:
 		"resume": resume_flight()
+		"action_freeze": show_action_freeze()
 		"options": show_options()
 		"save": save_game()
 		"menu":
@@ -1432,6 +1441,8 @@ func navigate_back() -> void:
 		show_title()
 	elif screen == "load_recovery":
 		close_load_menu()
+	elif screen == "action_freeze":
+		close_action_freeze(false)
 	elif screen == "flight":
 		show_pause()
 	elif screen == "pause":
@@ -1458,6 +1469,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			change_option("fullscreen", not DisplaySettings.fullscreen(get_window()))
 		elif event.physical_keycode == KEY_ESCAPE:
 			navigate_back()
+		elif event.physical_keycode == KEY_P and screen == "flight":
+			show_action_freeze()
 		elif event.physical_keycode == KEY_F5:
 			save_game()
 	if (
@@ -1844,6 +1857,12 @@ func _process(delta: float) -> void:
 			options_panel.values.fullscreen = fullscreen_now
 			options_panel.show_section("display", "fullscreen")
 	record_play_time(delta, get_window().has_focus())
+	if flight != null and screen == "recovery" and flight.outro_active:
+		flight.advance_outro(delta)
+	if flight != null and screen == "flight" and flight.outro_active and not flight.outro_music_played and flight.outro_elapsed >= float(library.content.flight_effects.outro.music_delay):
+		flight.outro_music_played = true
+		var track: int = library.content.flight_effects.outro.music
+		play_music(library.content.sound_bank[str(track)].path.get_file().get_basename())
 	if flight != null and screen in ["defeat", "survival_result", "survival_name"]:
 		flight.advance_defeat_presentation(delta)
 	if showcase.visible:
@@ -2073,7 +2092,7 @@ func acknowledge_recovery() -> void:
 
 
 func controls_help() -> String:
-	var other := "W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nEsc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses."
+	var other := "W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nP · Action freeze    Esc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses."
 	other += "\nOriginal flight controls enables reconstructed iPhone-style agility, inertia and banking. Mouse input is adapted. Off uses the previous remake controls."
 	other += "\nInvert reverses mouse, controller and touch Y. Arrow keys keep their direction."
 	var touch := "Touch: use the centered stick or drag empty space to steer. Hold Fire to shoot; double-tap Fire to enable autofire. Tap Fire once to stop. AUTO appears on the fire button while enabled. Pausing clears autofire."
@@ -2115,3 +2134,26 @@ func record_play_time(delta: float, focused: bool) -> void:
 			and not paused
 			and focused
 		)
+
+
+func show_action_freeze() -> void:
+	if screen not in ["flight", "pause"] or not is_instance_valid(flight) or session.hull <= 0: return
+	paused = true
+	flight.pause(true)
+	clear_page()
+	page.hide()
+	top.hide()
+	status.hide()
+	screen = "action_freeze"
+	action_freeze_panel = preload("res://src/presentation/action_freeze.gd").new()
+	ui.add_child(action_freeze_panel)
+	action_freeze_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	action_freeze_panel.configure(flight, music)
+	action_freeze_panel.closed.connect(close_action_freeze)
+
+
+func close_action_freeze(resume: bool) -> void:
+	if screen != "action_freeze": return
+	clear_page()
+	if resume: resume_flight()
+	else: show_pause()

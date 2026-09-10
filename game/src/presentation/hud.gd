@@ -99,11 +99,10 @@ func _process(_delta: float) -> void:
 			int(director.combo),
 			flight.session.elapsed * 1000.0
 		)
-		var missile_available := false
-		for id in flight.session.loadout.weapons():
-			if int(flight.library.items[id][1]) == flight.library.MISSILE_CATEGORY:
-				missile_available = missile_available or flight.session.weapon_enabled(id)
-		buttons.missiles.visible = touch_enabled and missile_available
+		buttons.missiles.visible = touch_enabled
+	var tutorial: Dictionary = flight.session.tutorial_cue()
+	for action in ["boost", "missiles"]:
+		buttons[action].self_modulate.a = 1.0 if tutorial.get("action") == action and tutorial.get("lit", false) else flight.button_opacity(action)
 	autofire_label.visible = touch_enabled and flight.controls.touch_autofire
 	queue_redraw()
 	var active: bool = not flight.paused and not flight.session.active_job.get("ready", false)

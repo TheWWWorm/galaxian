@@ -47,7 +47,7 @@ func run():
 	check(flight.player_hull.global_position.is_equal_approx(position), "Orientation correction cannot displace the ship")
 	flight.apply_control_settings({"original_flight_controls": false})
 	flight.update_camera(.02)
-	check(flight.player_hull.basis.is_equal_approx(flight.player_hull_rest), "Default controls retain their prior physical hull presentation")
+	check(flight.camera.unproject_position(flight.ship.position).distance_to(root.get_visible_rect().size * flight.SHIP_SCREEN_ANCHOR) < .1, "Default controls also use centered chase framing")
 	var cinematic := Session.new(); cinematic.configure(lib)
 	cinematic.chapter = 12; cinematic.progression = Session.Progression.create(12)
 	cinematic.station_id = lib.chapter_destination(11)

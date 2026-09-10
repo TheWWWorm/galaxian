@@ -85,6 +85,7 @@ has not been verified. Native desktop builds are preferable on low-memory device
 | Release / capture mouse | Tab | — |
 | Dismiss radio | Enter / tap the panel | — |
 | Pause | Escape | Start |
+| Action freeze | P or Pause menu | Pause menu |
 | Save / fullscreen | F5 / F11 | — |
 
 Time acceleration runs repeated simulation steps: up to 2× manually and 16× on
@@ -113,6 +114,11 @@ on the fire button while enabled; tap Fire once to stop. Pausing clears autofire
 Touch instructions appear first under **Options → Controls → Help** when touch
 controls are enabled. Android Back pauses/resumes flight or returns from a menu.
 Full key remapping is not implemented.
+
+**Action freeze** pauses the scene for screenshots. Drag to orbit, right-drag to pan
+and scroll to zoom; on touchscreens, use two fingers to pan and zoom. **Hide UI**
+removes the controls; H or a double-tap restores them. Resume returns to the same
+flight state and camera. Controller sticks move the camera and triggers zoom.
 
 Under **Options → Display**, toggle **Fullscreen** or choose an **Aspect ratio**.
 **Auto** fills your browser or resizable window; fixed ratios preserve the picture

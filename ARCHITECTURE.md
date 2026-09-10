@@ -720,7 +720,7 @@ and upgrade progression and remains excluded from campaign cargo recovery.
 Session settlement waits for the closing radio, adds recovered cargo alongside
 mission rewards, and persists a display receipt. Save schema17 migrates schema16
 without retroactive loot. Reload and acknowledgement never add cargo again.
-`presentation/recovery.gd` shows the result over the paused last flight, or the ship
+`presentation/recovery.gd` shows the result over the continuing cosmetic departure, or the ship
 view when resuming a docked save. Confirmation supports keyboard, controller, mouse,
 touch and the native Back action. Dock UI resumes after the receipt is acknowledged.
 
@@ -787,7 +787,7 @@ long localized messages while keeping confirmation visible.
 The survival HUD reads score/time placement, combo captions, unlock notices and
 strength-specific near/far/off-screen markers. Feedback follows simulation time,
 survives live HUD rebuilds, and suppresses old notices after loading. The source
-score threshold gates missile firing and its touch control. Per-run seeded sky
+score threshold gates missile firing; the visible touch button dims until available. Per-run seeded sky
 selection uses the supplied sky/style/cloud counts and recreates the same scene
 on resume without advancing the combat random stream. The source SpaceObject sun
 association belongs to the remaining lens-flare effect, not obstacle scenery.
@@ -1181,3 +1181,22 @@ coordinate scaling drive a temporary camera offset for surviving hits in both
 control schemes, without altering physical ship motion or extending an active
 shake on subsequent hits. Import schema80 carries these declarations; campaign29
 and Survival11 save formats are unchanged.
+
+
+### Fixed flight framing, mission departure and action freeze
+
+Both chase-control modes retain a fixed screen anchor below the reticle while
+rotational camera smoothing continues. The visible hull pitches and rolls relative
+to the camera; framing does not change simulated steering, inertia or position.
+
+Import schema81 selects the friendly station-local trail branch and recovers
+mission-success camera offsets, the closing transition interval, victory music
+and boost/missile button opacity. On success, an invulnerable cosmetic departure
+continues through closing radio and the reward receipt under a camera with a fixed
+world position. Settlement still waits for dialogue and happens once. Departure
+behind a settled receipt cannot mutate the save or grant additional rewards.
+
+Action freeze is a remake feature available from Pause or P. It suspends the flight
+scene and its audio, permits orbit/pan/zoom and hiding controls, and restores the
+previous camera and processing state on exit. Its inspection camera does not
+modify gameplay or saves. Campaign29 and Survival11 saves remain compatible.

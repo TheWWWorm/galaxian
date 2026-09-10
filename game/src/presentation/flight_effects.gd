@@ -33,6 +33,20 @@ static func valid(value: Variant, materials: Dictionary, styles: Dictionary) -> 
 		or value.fov_degrees + value.fov_boost_degrees >= 170
 	):
 		return false
+	var outro = value.get("outro")
+	if not outro is Dictionary or not Combat.valid_vector(outro.get("camera_offset")) or Combat.vector(outro.camera_offset).length() > 10000:
+		return false
+	for key in ["settle_seconds", "music_delay"]:
+		if not Combat.number(outro.get(key)) or outro[key] <= 0 or outro[key] > 60:
+			return false
+	if not Combat.integer(outro.get("music")) or outro.music < 0 or outro.music > 255:
+		return false
+	var opacity = value.get("button_opacity")
+	if not opacity is Dictionary:
+		return false
+	for key in ["boost_active", "boost_base", "boost_gain", "missile_unavailable"]:
+		if not Combat.number(opacity.get(key)) or opacity[key] < 0 or opacity[key] > 1:
+			return false
 	var stars: Dictionary = value.stars
 	if not Combat.integer(stars.get("count")) or stars.count < 1 or stars.count > 200:
 		return false

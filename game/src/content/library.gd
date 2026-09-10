@@ -252,6 +252,9 @@ func validate_content() -> bool:
 	if not content.get("sound_bank", {}).has(str(int(content.flight_effects.boost_sound))):
 		error = "Missing imported boost sound. Import the IPA again."
 		return false
+	if not content.get("sound_bank", {}).has(str(int(content.flight_effects.outro.music))):
+		error = "Missing imported mission completion music. Import the IPA again."
+		return false
 	if not preload("res://src/simulation/mines.gd").valid_parameters(
 		content.get("mine_behavior"),
 		content.get("resources", {}),

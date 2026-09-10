@@ -65,6 +65,7 @@ var boost: float:
 			else 1.0
 		)
 var follow_distance := 43.0
+const SHIP_SCREEN_ANCHOR := Vector2(.5, .75)
 var simulation_time := 0.0
 var recent_damage := 0.0
 var player_hit = preload("res://src/presentation/player_hit.gd").new()
@@ -82,6 +83,13 @@ var laser_sound: AudioStreamWAV
 var ambience := Node3D.new()
 var checkpoint_elapsed := 0.0
 var first_person := false
+var outro_active := false
+var outro_elapsed := 0.0
+var outro_ready_elapsed := 0.0
+var outro_camera_position := Vector3.ZERO
+var outro_music_played := false
+var outro_settled := false
+
 
 
 func setup(data, state, options: Dictionary, resume: bool = false) -> void:
@@ -166,7 +174,7 @@ func setup(data, state, options: Dictionary, resume: bool = false) -> void:
 
 
 func boosting() -> bool:
-	return not player_destroyed and session.motion.boost_remaining > 0
+	return not player_destroyed and not outro_active and session.motion.boost_remaining > 0
 
 
 func boost_elapsed() -> float:
@@ -331,15 +339,22 @@ func update_player_bank(seconds: float = 0.0) -> void:
 func update_player_hull_frame() -> void:
 	if not is_instance_valid(player_hull): return
 	var frame := Basis.IDENTITY
-	if original_controls() and chase_camera_active and not first_person:
+	if chase_camera_active and not first_person:
 		# Keep the visible hull's heading aligned with the chase camera. The
 		# logical ship still owns navigation, collision, aim and saved orientation.
 		# Only the cosmetic bank/pitch is visible relative to the camera.
 		frame = ship.global_basis.inverse() * camera.global_basis
-	player_hull.basis = frame * Basis.from_euler(displayed_bank) * player_hull_rest
+	var bank := displayed_bank
+	if not original_controls() and chase_camera_active and not first_person:
+		# Native controls keep their physical response. Convert camera-relative
+		# deflection into pitch/roll, without showing a sideways yaw pivot.
+		var relative := (camera.global_basis.inverse() * ship.global_basis).get_euler()
+		bank = Vector3(relative.x, 0, -relative.y)
+	player_hull.basis = frame * Basis.from_euler(bank) * player_hull_rest
 
 
 func cinematic_locked() -> bool:
+	if outro_active: return true
 	if library == null or session == null or session.active_job.is_empty():
 		return false
 	return (
@@ -433,6 +448,7 @@ func step(dt: float) -> void:
 		lose_ship()
 		return
 	if finish_if_ready():
+		advance_outro(dt)
 		return
 	if not session.active_job.is_empty():
 		session.active_job.camera_position = session.Combat.packed(camera.position)
@@ -444,6 +460,7 @@ func step(dt: float) -> void:
 		session.Mission.Scenery.advance(session.field_definition(), session.field_state(), dt)
 	sync_fields()
 	if finish_if_ready():
+		advance_outro(dt)
 		return
 	if session.active_job.get("failed", false):
 		paused = true
@@ -669,7 +686,10 @@ func step(dt: float) -> void:
 func finish_if_ready() -> bool:
 	if session.active_job.get("ready", false):
 		time_factor = 1
-		if session.ready_to_finish():
+		if not outro_active:
+			begin_outro()
+		if session.ready_to_finish() and outro_ready_elapsed >= float(library.content.flight_effects.outro.settle_seconds) and not outro_settled:
+			outro_settled = true
 			paused = true
 			mission_completed.emit()
 		return true
@@ -681,7 +701,7 @@ func navigation_target() -> Vector3:
 
 
 func hit(amount: float, incoming: Vector3 = Vector3.ZERO) -> void:
-	if session.hull <= 0 or not is_finite(amount) or amount <= 0:
+	if outro_active or session.hull <= 0 or not is_finite(amount) or amount <= 0:
 		return
 	if not (
 		session
@@ -1275,6 +1295,12 @@ func objective() -> String:
 
 func update_camera(dt: float) -> void:
 	player_hit.restore_camera(camera)
+	if outro_active:
+		camera.position = outro_camera_position
+		if camera.position.distance_squared_to(ship.position) > .001:
+			camera.look_at(ship.position, ship.basis.y)
+		if backdrop != null: backdrop.follow(camera)
+		return
 	camera.fov = FlightEffects.field_of_view(library.content.flight_effects, boost_elapsed(), boosting())
 	var direction: Dictionary = session.Mission.Sequence.directives(
 		session.mission_definition(), session.active_job
@@ -1329,19 +1355,20 @@ func update_camera(dt: float) -> void:
 			backdrop.follow(camera)
 		return
 	chase_camera_active = true
-	var desired := (
-		ship.position
-		if first_person
-		else ship.position + ship.basis.z * follow_distance + ship.basis.y * 15
-	)
 	if original_controls():
 		var follow: Dictionary = library.content.player_motion.steering
 		var ticks := dt / float(follow.reference_seconds)
-		camera.position = camera.position.lerp(desired, 1.0 - pow(1.0 - float(follow.position_blend), ticks))
 		camera.basis = camera.basis.slerp(ship.basis, 1.0 - pow(1.0 - float(follow.look_blend), ticks)).orthonormalized()
 	else:
-		camera.position = camera.position.lerp(desired, minf(dt * 8, 1))
 		camera.basis = camera.basis.slerp(ship.basis, minf(dt * 10, 1)).orthonormalized()
+	# One camera frame owns both position and direction. The hull stays at its fixed screen anchor
+	# through acceleration, small turns and reversals instead of sliding sideways.
+	camera.position = ship.position
+	if not first_person:
+		# Preserve the lower-center ship composition shown in the reference footage,
+		# leaving the reticle clear. Projection scaling keeps this point fixed on boost.
+		var rise := follow_distance * (SHIP_SCREEN_ANCHOR.y * 2.0 - 1.0) / camera.get_camera_projection().y.y
+		camera.position += camera.basis.z * follow_distance + camera.basis.y * rise
 
 	update_player_hull_frame()
 	player_hit.shake_camera(camera, dt, follow_distance)
@@ -1559,3 +1586,61 @@ func advance_defeat_presentation(seconds: float) -> void:
 		return
 	player_hit.clear_flash()
 	advance_explosions(seconds)
+
+
+func begin_outro() -> void:
+	outro_active = true
+	player_hit.restore_camera(camera)
+	player_hit.shake_remaining = 0
+	player_hit.clear_flash()
+	outro_camera_position = camera.global_transform * session.Combat.vector(library.content.flight_effects.outro.camera_offset)
+	chase_camera_active = false
+	first_person = false
+	ship.show()
+	displayed_bank = Vector3.ZERO
+	update_player_hull_frame()
+	controls.clear()
+	mouse_motion = Vector2.ZERO
+	auto_pilot = false
+	boost_held = false
+	boost_audio.stop()
+	camera.fov = float(library.content.flight_effects.fov_degrees)
+
+
+func advance_outro(seconds: float) -> void:
+	if not outro_active or seconds <= 0 or not is_finite(seconds): return
+	outro_elapsed += seconds
+	if not outro_settled and session.ready_to_finish():
+		outro_ready_elapsed += seconds
+	# This is presentation after success. Combat, cargo, rewards and mission
+	# deadlines are already settled or held; departing visuals cannot change them.
+	speed = float(library.content.player_motion.cruise_speed)
+	ship.position -= ship.basis.z * speed * seconds
+	update_player_exhaust(speed, seconds)
+	flight_effects.advance(seconds, ship.global_transform, false, 0)
+	advance_explosions(seconds)
+	for actor in actors:
+		if not is_instance_valid(actor.node) or not actor.state.has("fighter_motion"): continue
+		var forward_speed: float = actor.state.fighter_motion.speed
+		actor.node.position -= actor.node.basis.z * forward_speed * seconds
+		advance_actor_exhaust(actor.node, seconds, forward_speed)
+		if actor.node.has_meta("ship_trails"):
+			actor.node.get_meta("ship_trails").advance(seconds, actor.node.global_transform)
+	update_camera(seconds)
+
+
+func missile_ready() -> bool:
+	for id in session.loadout.weapons():
+		if int(library.items[id][1]) == library.MISSILE_CATEGORY and session.weapon_enabled(id) and float(weapon_timers.get(id, 0)) <= 0:
+			return true
+	return false
+
+
+func button_opacity(action: String) -> float:
+	var data: Dictionary = library.content.flight_effects.button_opacity
+	if action == "missiles":
+		return 1.0 if missile_ready() else float(data.missile_unavailable)
+	if action == "boost":
+		if boosting(): return float(data.boost_active)
+		if boost < 1.0: return float(data.boost_base) + float(data.boost_gain) * boost
+	return 1.0

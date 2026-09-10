@@ -12,7 +12,7 @@ var return_focus: Control
 func setup(source, help: String, arcade: bool, saving: bool) -> void:
 	configure(source)
 	data = data.duplicate(true)
-	data.row_step = library.content.pause_ui.row_step
+	data.row_step = float(library.content.pause_ui.row_step) * 5.0 / 6.0
 	help_text = help
 	survival = arcade
 	can_save = saving
@@ -26,6 +26,7 @@ func show_root() -> void:
 		{"text": library.text(int(labels.resume)), "action": "resume"},
 		{"text": library.text(int(labels.options)), "action": "options"},
 		{"text": library.text(int(labels.help)), "action": "help"},
+		{"text": "Action freeze", "action": "action_freeze", "hint": "Freeze the scene and explore it with the camera."},
 		{"text": "Save pilot", "action": "save", "enabled": can_save},
 		{"text": library.text(int(labels.menu)), "action": "menu",
 			"hint": "Save your pilot and return to the main menu." if can_save else "Return to the main menu."}
@@ -55,7 +56,7 @@ func handle_action(action: String) -> void:
 			if can_save: selected.emit(action)
 		"load":
 			if can_save and not survival: selected.emit(action)
-		"resume", "options", "menu": selected.emit(action)
+		"resume", "options", "menu", "action_freeze": selected.emit(action)
 
 
 func back() -> void:

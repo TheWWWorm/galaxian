@@ -14996,7 +14996,7 @@ func menu_traffic() -> Dictionary:
 		"local_route": routes[0],
 		"route_start": immediate_at(0x5b9a6, 3),
 		"waypoint_half_width": float(literal(0x5baee, 3)) * .02,
-		"local_trail": {"style": immediate_at(0x55846, 1), "segments": immediate_at(0x55852, 2)},
+		"local_trail": {"style": immediate_at(0x5584a, 1), "segments": immediate_at(0x55852, 2)},
 		"trail_seconds": float(u16(0x55ae4) & 255) / 1000.0,
 		"orbital_position":
 		[0, 0, (65536 >> ((u16(0x13b72) >> 6) & 31)) << ((u16(0x13b80) >> 6) & 31)],
@@ -16249,6 +16249,8 @@ func flight_effects() -> Dictionary:
 		return {}
 	var result := {
 		"boost_sound": immediate_at(0x54018, 1),
+		"outro": mission_outro_presentation(),
+		"button_opacity": flight_button_opacity(),
 		"ramp_seconds": literal_float(0x53bfe, 1) / 1000.0,
 		"plateau": literal_float(0x53c28, 4),
 		"release_at": literal_float(0x53c1e, 1),
@@ -16308,3 +16310,43 @@ func flight_effects() -> Dictionary:
 		}
 	}
 	return result if error.is_empty() else {}
+
+
+func flight_button_opacity() -> Dictionary:
+	for pair in [
+		[0x285f8, "__ZN9PlayerEgo8boostingEv"],
+		[0x28622, "__ZN9PlayerEgo12getBoostRateEv"],
+		[0x28274, "__ZN9PlayerEgo18getRocketDelayTimeEv"],
+		[0x28646, "__ZN11AbyssEngine11PaintCanvas8SetColorEhhhh"],
+		[0x28294, "__ZN11AbyssEngine11PaintCanvas8SetColorEhhhh"]
+	]:
+		if call_target(pair[0]) != symbol_address(pair[1]):
+			fail("Unsupported flight button opacity consumer.")
+			return {}
+	return {
+		"boost_active": immediate_at(0x28600, 0) / 255.0,
+		"boost_base": (u16(0x28630) & 255) / 255.0,
+		"boost_gain": literal_float(0x28626, 1) / 255.0,
+		"missile_unavailable": immediate_at(0x28280, 3) / 255.0
+	}
+
+
+func mission_outro_presentation() -> Dictionary:
+	for pair in [
+		[0x44b38, "__ZN5Level14checkObjectiveEi"],
+		[0x44b4a, "__ZN18TargetFollowCamera12setLookAtCamEb"],
+		[0x44b76, "__ZN11AbyssEngine6AEMath21MatrixTransformVectorERKNS0_6MatrixERKNS0_6VectorE"],
+		[0x44b8c, "__ZN18TargetFollowCamera11setPositionEiii"],
+		[0x44b98, "__ZN6Player13setVulnerableEb"],
+		[0x44a24, "__ZN11AbyssEngine18ApplicationManager14SoundPlayMusicEi"]
+	]:
+		if call_target(pair[0]) != symbol_address(pair[1]):
+			fail("Unsupported mission departure camera consumer.")
+			return {}
+	var side := shifted_at(0x44b4e, 0x44b52, 3) * .02
+	return {
+		"camera_offset": [side, side, -signed_literal(0x44b58, 3) * .02],
+		"settle_seconds": (literal(0x44b08, 3) - literal(0x44a66, 2)) / 1000.0,
+		"music_delay": shifted_at(0x44a08, 0x44a0a, 3) / 1000.0,
+		"music": immediate_at(0x44a1c, 1)
+	}

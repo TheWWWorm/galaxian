@@ -29,7 +29,7 @@ func run():
 		flight.step(1.0 / 60)
 	var expected := start.rotated(Vector3.UP, -40 * float(app.settings.sensitivity))
 	check(flight.ship.basis.is_equal_approx(expected), "Sparse one-pixel mouse moves retain their full angular distance")
-	check(flight.player_hull.basis.is_equal_approx(flight.player_hull_rest) and app.session.motion.turn == [0.0, 0.0], "Default mode has no bank jitter or residual inertia")
+	check(app.session.motion.turn == [0.0, 0.0], "Default mode has no residual steering inertia")
 	var before: Basis = flight.ship.basis
 	for tick in 60: flight.step(1.0 / 60)
 	check(flight.ship.basis.is_equal_approx(before), "Default mouse turn stops immediately after motion stops")
@@ -39,9 +39,9 @@ func run():
 	check(absf(flight.ship.rotation.y + .012) < .000001, "Default small analog turn uses the previous linear 1.2 rad/s response")
 	flight.controls.clear()
 	flight.camera.position = Vector3.ZERO; flight.ship.position = Vector3(2000, 0, 2000)
-	var desired: Vector3 = flight.ship.position + flight.ship.basis.z * flight.follow_distance + flight.ship.basis.y * 15
+	var desired: Vector3 = flight.ship.position
 	flight.update_camera(.02)
-	check(flight.camera.position.is_equal_approx(desired * .16), "Default mode restores previous camera smoothing")
+	check(flight.camera.unproject_position(desired).distance_to(root.get_visible_rect().size * flight.SHIP_SCREEN_ANCHOR) < .1, "Default chase view keeps ship centered")
 	app.show_options(); app.options_panel.show_section("controls")
 	check(app.options_panel.values.original_flight_controls == false, "Controls menu displays original mode unchecked")
 	for row in app.options_panel.buttons:
@@ -72,7 +72,7 @@ func run():
 	app.show_options(); app.options_panel.show_section("controls"); app.options_panel.handle_action("original_flight_controls")
 	app.close_options(); app.resume_flight(); flight.set_physics_process(false)
 	check(not flight.original_controls() and app.session.motion.turn == [0.0, 0.0] and flight.mouse_motion == Vector2.ZERO, "Switching back clears buffered motion and angular state")
-	check(flight.ship.basis.is_equal_approx(before) and flight.player_hull.basis.is_equal_approx(flight.player_hull_rest), "Switching profiles preserves heading and restores level hull")
+	check(flight.ship.basis.is_equal_approx(before), "Switching profiles preserves physical heading")
 	app.music.stop(); app.stop_flight(); app.queue_free()
 	await process_frame
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://feedback-settings.cfg"))
