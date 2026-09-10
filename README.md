@@ -121,3 +121,7 @@ Original content and trademarks belong to their rights holders. This is not an
 official Fishlabs release, and the engine license grants no rights to game assets.
 File formats and behavior were investigated using supplied games; this is not a
 clean-room claim.
+
+## Donations
+If you want to support this development or ones similar to it, you can do it here https://ko-fi.com/wwworm
+Please only do it if you have money for it and always be financially responsibe. Nevertheless I am grateful for any support given.
