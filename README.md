@@ -57,6 +57,10 @@ J2ME JARs are not accepted. Keep your IPA so you can recreate the local cache.
 
 ### Browser requirements
 
+On iPhone, open the HTTPS site in Safari and choose **Share → Add to Home Screen**.
+Launch its home-screen icon for full-screen play. Keep **Aspect ratio: Auto** to
+fill the available screen.
+
 Use a browser supporting WebGL 2, WebAssembly threads and persistent site storage.
 Browser saves and imported content belong to that browser profile and site origin;
 clearing site data removes them, and private browsing may not preserve them.

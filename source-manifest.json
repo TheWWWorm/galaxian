@@ -205,6 +205,8 @@
     "game/tests/integration.gd.uid",
     "game/tests/web_display.gd",
     "game/tests/web_display.gd.uid",
+    "game/web/GODOT_LICENSE.txt",
+    "game/web/shell.html",
     "source-manifest.json",
     "tools/package_source.py",
     "tools/prepare_web_host.py",
