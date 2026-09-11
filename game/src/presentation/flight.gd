@@ -83,6 +83,11 @@ var laser_sound: AudioStreamWAV
 var ambience := Node3D.new()
 var checkpoint_elapsed := 0.0
 var first_person := false
+var motion_sensor
+var chase_follow_basis := Basis.IDENTITY
+var outro_projectiles: Array = []
+var outro_profiles := {}
+var outro_definition := {}
 var outro_active := false
 var outro_elapsed := 0.0
 var outro_ready_elapsed := 0.0
@@ -345,11 +350,11 @@ func update_player_hull_frame() -> void:
 		# Only the cosmetic bank/pitch is visible relative to the camera.
 		frame = ship.global_basis.inverse() * camera.global_basis
 	var bank := displayed_bank
-	if not original_controls() and chase_camera_active and not first_person:
+	if chase_camera_active and not first_person:
 		# Native controls keep their physical response. Convert camera-relative
 		# deflection into pitch/roll, without showing a sideways yaw pivot.
 		var relative := (camera.global_basis.inverse() * ship.global_basis).get_euler()
-		bank = Vector3(relative.x, 0, -relative.y)
+		bank = Vector3(relative.x, 0, displayed_bank.z if original_controls() else -(chase_follow_basis.inverse() * ship.global_basis).get_euler().y)
 	player_hull.basis = frame * Basis.from_euler(bank) * player_hull_rest
 
 
@@ -492,6 +497,8 @@ func step(dt: float) -> void:
 	var frozen: bool = directions.frozen
 	if not directions.locked and not frozen:
 		var pad := controls.snapshot()
+		if settings.get("motion_steering", false) and motion_sensor != null:
+			pad.look += motion_sensor.look(dt, float(settings.get("motion_sensitivity", .5)))
 		var up := (
 			float(Input.is_physical_key_pressed(KEY_W))
 			- float(Input.is_physical_key_pressed(KEY_S))
@@ -948,8 +955,8 @@ func guidance_visible(point: Vector3) -> bool:
 
 func sync_projectiles(advance_trails: bool = false) -> void:
 	var alive := {}
-	var profiles: Dictionary = session.actor_weapons()
-	for shot in session.combat.projectiles:
+	var profiles: Dictionary = outro_profiles if outro_active else session.actor_weapons()
+	for shot in (outro_projectiles if outro_active else session.combat.projectiles):
 		var id := int(shot.id)
 		var profile: Dictionary = session.Combat.profile(int(shot.weapon), library, profiles)
 		alive[id] = true
@@ -1354,13 +1361,19 @@ func update_camera(dt: float) -> void:
 		if backdrop != null:
 			backdrop.follow(camera)
 		return
+	if not chase_camera_active: chase_follow_basis = ship.basis
 	chase_camera_active = true
 	if original_controls():
 		var follow: Dictionary = library.content.player_motion.steering
 		var ticks := dt / float(follow.reference_seconds)
-		camera.basis = camera.basis.slerp(ship.basis, 1.0 - pow(1.0 - float(follow.look_blend), ticks)).orthonormalized()
+		chase_follow_basis = chase_follow_basis.slerp(ship.basis, 1.0 - pow(1.0 - float(follow.look_blend), ticks)).orthonormalized()
 	else:
-		camera.basis = camera.basis.slerp(ship.basis, minf(dt * 10, 1)).orthonormalized()
+		chase_follow_basis = chase_follow_basis.slerp(ship.basis, minf(dt * 10, 1)).orthonormalized()
+	camera.basis = chase_follow_basis
+	# Follow yaw immediately, retaining pitch lag and smooth cosmetic banking.
+	# The physical firing direction stays on the vertical line through the nose.
+	var local_forward := camera.basis.inverse() * -ship.basis.z
+	camera.basis *= Basis(Vector3.UP, atan2(-local_forward.x, -local_forward.z))
 	# One camera frame owns both position and direction. The hull stays at its fixed screen anchor
 	# through acceleration, small turns and reversals instead of sliding sideways.
 	camera.position = ship.position
@@ -1518,6 +1531,13 @@ func advance_explosions(seconds: float) -> void:
 				effect.body, seconds, session.Combat.vector(clock.velocity).length()
 			)
 		else:
+			if effect.has_meta("outro_velocity"):
+				var velocity: Vector3 = effect.get_meta("outro_velocity")
+				var motion: Dictionary = library.content.actor_destruction.drift
+				var rate := -log(float(motion.retention)) / float(motion.reference_seconds)
+				var decay := exp(-rate * seconds)
+				effect.position += velocity * (1.0-decay) / rate
+				effect.set_meta("outro_velocity", velocity * decay)
 			effect.advance(seconds)
 		if effect.finished and effect.sounds.all(func(player): return not player.playing):
 			var index: int = effect.get_meta("actor_index", -1)
@@ -1590,6 +1610,14 @@ func advance_defeat_presentation(seconds: float) -> void:
 
 func begin_outro() -> void:
 	outro_active = true
+	outro_projectiles = session.combat.projectiles.duplicate(true)
+	outro_profiles = session.actor_weapons().duplicate(true)
+	outro_definition = session.mission_definition().duplicate(true)
+	# Existing wrecks finish independently from the settled mission state.
+	for effect in explosions:
+		if effect.has_meta("destruction_clock"):
+			effect.set_meta("outro_velocity", session.Combat.vector(effect.get_meta("destruction_clock").velocity))
+			effect.remove_meta("destruction_clock")
 	player_hit.restore_camera(camera)
 	player_hit.shake_remaining = 0
 	player_hit.clear_flash()
@@ -1619,10 +1647,22 @@ func advance_outro(seconds: float) -> void:
 	update_player_exhaust(speed, seconds)
 	flight_effects.advance(seconds, ship.global_transform, false, 0)
 	advance_explosions(seconds)
+	for shot in outro_projectiles:
+		shot.position = session.Combat.packed(session.Combat.vector(shot.position) + session.Combat.vector(shot.velocity) * seconds)
+		shot.remaining -= seconds
+	outro_projectiles = outro_projectiles.filter(func(shot): return shot.remaining > 0)
+	sync_projectiles(true)
+	var definition: Dictionary = outro_definition
 	for actor in actors:
-		if not is_instance_valid(actor.node) or not actor.state.has("fighter_motion"): continue
-		var forward_speed: float = actor.state.fighter_motion.speed
-		actor.node.position -= actor.node.basis.z * forward_speed * seconds
+		if not is_instance_valid(actor.node) or float(actor.state.hp) <= 0: continue
+		var group: Dictionary = definition.groups[int(actor.state.group)]
+		var velocity := Vector3.ZERO
+		if actor.state.has("fighter_motion"):
+			velocity = -actor.node.basis.z * float(actor.state.fighter_motion.speed)
+		elif group.get("behavior") == "transit":
+			velocity = session.Combat.vector(group.velocity)
+		var forward_speed := velocity.length()
+		actor.node.position += velocity * seconds
 		advance_actor_exhaust(actor.node, seconds, forward_speed)
 		if actor.node.has_meta("ship_trails"):
 			actor.node.get_meta("ship_trails").advance(seconds, actor.node.global_transform)
@@ -1644,3 +1684,11 @@ func button_opacity(action: String) -> float:
 		if boosting(): return float(data.boost_active)
 		if boost < 1.0: return float(data.boost_base) + float(data.boost_gain) * boost
 	return 1.0
+
+
+func radar_enemy_present() -> bool:
+	var definition: Dictionary = session.mission_definition()
+	for actor in session.active_job.get("actors", []):
+		if session.Mission.enemy(definition, actor) and session.Mission.actor_active(definition, session.active_job, actor):
+			return true
+	return false

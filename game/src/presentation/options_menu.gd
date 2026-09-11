@@ -8,6 +8,7 @@ var option_art := {}
 var sliders := {}
 var entries: Array = []
 var help_text := ""
+var notice_return := "options"
 
 
 func setup(source, settings: Dictionary, help: String) -> void:
@@ -40,6 +41,8 @@ func label_for(key: String) -> String:
 		"original_flight_controls": "Original flight controls",
 		"weapons": "Weapon controls",
 		"steering": "Steering settings",
+		"motion": "Motion steering", "motion_steering": "Steer by tilting",
+		"motion_sensitivity": "Tilt sensitivity", "calibrate_motion": "Center motion controls",
 		"help": library.text(int(data.labels.help))
 	}.get(key, key)
 
@@ -50,7 +53,8 @@ func show_section(page: String, focus_key: String = "") -> void:
 	var keys: Array = {
 		"options": ["controls", "audio", "display", "language"],
 		"controls": ["original_flight_controls", "steering", "weapons", "help"],
-		"steering": ["invert", "sensitivity"],
+		"steering": ["invert", "sensitivity", "motion"],
+		"motion": ["motion_steering", "motion_sensitivity", "calibrate_motion"],
 		"weapons": ["aim_assist", "linked_fire"],
 		"audio": ["effects_volume", "music_volume"],
 		"display": ["fullscreen", "aspect_ratio", "flight_hud"],
@@ -76,7 +80,7 @@ func show_section(page: String, focus_key: String = "") -> void:
 	for index in entries.size():
 		var key: String = entries[index].action
 		var height := float(art.idle.get_height())
-		if key in ["music_volume", "effects_volume", "sensitivity"]:
+		if key in ["music_volume", "effects_volume", "sensitivity", "motion_sensitivity"]:
 			height = float(option_art.slider_idle.get_height())
 		elif values.get(key) is bool:
 			height = maxf(height, option_art.checked.get_height())
@@ -99,7 +103,7 @@ func show_section(page: String, focus_key: String = "") -> void:
 		var button: Button = buttons[index]
 		button.position.y = row_y
 		row_y += row_steps[index]
-		if key in ["music_volume", "effects_volume", "sensitivity"]:
+		if key in ["music_volume", "effects_volume", "sensitivity", "motion_sensitivity"]:
 			var slider := add_slider(button, key, str(entries[index].text))
 			focus_controls.append(slider)
 		elif values.get(key) is bool:
@@ -199,8 +203,10 @@ func update_slider_caption(label: Label, caption: String, key: String, amount: f
 func handle_action(action: String) -> void:
 	if action == "back":
 		back()
-	elif action in ["controls", "audio", "display", "flight_hud", "steering", "weapons", "help"]:
+	elif action in ["controls", "audio", "display", "flight_hud", "steering", "motion", "weapons", "help"]:
 		show_section(action)
+	elif action == "calibrate_motion":
+		setting_changed.emit(action, true)
 	elif action == "language":
 		var languages: Array[String] = library.available_languages()
 		if not languages.is_empty():
@@ -217,11 +223,20 @@ func handle_action(action: String) -> void:
 
 
 func back() -> void:
-	if section == "options":
+	if section == "notice":
+		show_section(notice_return)
+	elif section == "options":
 		back_requested.emit()
+	elif section == "motion":
+		show_section("steering", "motion")
 	elif section == "flight_hud":
 		show_section("display", "flight_hud")
 	elif section in ["help", "steering", "weapons"]:
 		show_section("controls", section)
 	else:
 		show_section("options", section)
+
+
+func show_notice(message: String) -> void:
+	if section != "notice": notice_return = section
+	present("notice", [], library.text(int(library.content.briefing_ui.labels.back)), "back", message)

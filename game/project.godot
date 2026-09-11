@@ -3,7 +3,7 @@ config_version=5
 [application]
 config/name="Galaxy on Fire — Native Remake"
 config/icon="res://icon.svg"
-config/version="1.0.5"
+config/version="1.0.6"
 run/main_scene="res://scenes/main.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="gof1-remake"
@@ -31,3 +31,6 @@ environment/defaults/default_clear_color=Color(0.004, 0.009, 0.024, 1)
 
 [input_devices]
 pointing/emulate_mouse_from_touch=true
+
+sensors/enable_gravity=true
+sensors/enable_accelerometer=true

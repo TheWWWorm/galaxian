@@ -113,6 +113,10 @@ Hold **Fire** to shoot, or **double-tap Fire** to enable autofire. **AUTO** appe
 on the fire button while enabled; tap Fire once to stop. Pausing clears autofire.
 Touch instructions appear first under **Options → Controls → Help** when touch
 controls are enabled. Android Back pauses/resumes flight or returns from a menu.
+On supported phones, **Options → Controls → Steering settings → Motion steering** enables calibrated
+tilt steering, with sensitivity and a **Center motion controls** action. Hold your
+phone comfortably before enabling or centering it. Browsers may ask for sensor
+permission. This is a remake feature; physical-device tuning is still unverified.
 Full key remapping is not implemented.
 
 **Action freeze** pauses the scene for screenshots. Drag to orbit, right-drag to pan
@@ -138,6 +142,11 @@ the entire pilot state and discard subsequent progress. They are preserved when
 in-flight autosaves update. Older saves without these snapshots offer an explicit
 station recovery: repair the ship and reset the unfinished mission while keeping
 the saved inventory and credits, without completion rewards.
+
+**Game files → Transfer saves** exports campaign, exploration and Survival saves
+together in a `.gofsave` file. Import the same IPA on the destination device, then
+import that save file. The import lists the slots it will replace and preserves a
+backup of existing saves. Game assets are not included in the transfer.
 
 Native desktop data lives in the Godot user-data directory named `gof1-remake`
 (`~/.local/share/gof1-remake/` on Linux). Android uses private application storage;

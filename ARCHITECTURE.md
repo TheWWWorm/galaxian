@@ -1134,7 +1134,7 @@ it does not claim bit-identical physical-device handling.
 
 `original_flight_controls` defaults false, including when absent from existing
 preferences. Off restores direct mouse steering, linear 1.2 rad/s keyboard/stick
-response, an unbanked hull and the previous native follow-camera interpolation.
+response and the native steering profile. Chase presentation is shared across modes.
 On selects the reconstructed source-based profile. Switching clears pending mouse
 and angular state without changing heading; opening a save in default mode also
 clears angular state. Inversion remains limited to mouse/controller/touch pitch.
@@ -1149,13 +1149,12 @@ reduce small, intermittent mouse-packet jitter; it never changes the flight fram
 The mode's help describes the iPhone reconstruction and native mouse adaptation.
 
 
-In the original-controls chase view, the rendered hull takes its base orientation
+In both chase-control modes, the rendered hull takes its base orientation
 from the camera, then applies the smoothed cosmetic roll/pitch. Its local basis
 compensates for the physical ship's heading, so camera follow lag does not add
 visible ship yaw. Camera updates refresh this basis without advancing the bank
 filter again. The physical ship retains movement, aiming, collision and saved
-orientation. Default controls, first-person and authored external cameras retain
-the physical hull frame. This is a native presentation adjustment informed by
+orientation. First-person and authored external cameras retain the physical hull frame. This is a native presentation adjustment informed by
 reference footage, not a new original-binary behavior claim.
 
 Flight feedback imports the player boost envelope, perspective angles, moving-star
@@ -1186,7 +1185,8 @@ and Survival11 save formats are unchanged.
 ### Fixed flight framing, mission departure and action freeze
 
 Both chase-control modes retain a fixed screen anchor below the reticle while
-rotational camera smoothing continues. The visible hull pitches and rolls relative
+pitch smoothing and cosmetic bank interpolation continue; yaw follows the physical
+firing direction immediately. The visible hull pitches and rolls relative
 to the camera; framing does not change simulated steering, inertia or position.
 
 Import schema81 selects the friendly station-local trail branch and recovers
@@ -1200,3 +1200,33 @@ Action freeze is a remake feature available from Pause or P. It suspends the fli
 scene and its audio, permits orbit/pan/zoom and hiding controls, and restores the
 previous camera and processing state on exit. Its inspection camera does not
 modify gameplay or saves. Campaign29 and Survival11 saves remain compatible.
+
+
+### Flight feedback and portable saves
+
+Import schema82 adds Radar music declarations and ObjectGun projectile meshes.
+Active enemy radar contacts switch to a random choice of the two supplied battle
+tracks after the source one-second delay. Peaceful flight returns after four seconds;
+Survival keeps battle music between waves. Cosmetic music selection uses its own RNG.
+Faction/actor gun profiles select the supplied projectile meshes while preserving
+explicit special weapon profiles and independent Survival bindings.
+
+The chase reticle still projects the simulated firing direction. Camera yaw now
+keeps it aligned horizontally with the visible nose in both steering modes.
+The mission-success camera begins ahead of the ship using the signed source offset,
+then tracks its flyby from a fixed world position. Existing projectiles and wrecks
+use detached cosmetic clocks; freighters keep their transit velocity while rewards
+and simulation remain settled.
+
+MotionSteering supplies optional calibrated gravity-based phone tilt with a dead
+zone, smoothing, sensitivity and recentering. Native gravity/accelerometer and browser
+DeviceMotion inputs are supported. Absolute tilt avoids integrated gyro drift;
+this is not a reconstruction of GOF2 sensor tuning. Device testing is still pending.
+
+Ship catalogue information and exchange confirmation list supplied mount counts
+for each weapon category, including unsupported categories with zero slots.
+SaveTransfer validates all portable data before staging a sibling save directory,
+preserving prior files in a timestamped backup and replacing the directory only
+after all writes succeed. Transfers require identical IPA content identities and
+contain only pilot/survival data. Native dialogs and browser upload/download share
+this validation path. Campaign29 and Survival11 save formats are unchanged.

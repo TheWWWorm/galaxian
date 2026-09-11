@@ -37,7 +37,7 @@ func run():
 	reader.bytes = source
 	reader.parse_macho()
 	check(
-		Combat.vector(lib.content.flight_effects.outro.camera_offset) == Vector3(20, 20, 160),
+		Combat.vector(lib.content.flight_effects.outro.camera_offset) == Vector3(20, 20, -160),
 		"Source success camera offset"
 	)
 	check(

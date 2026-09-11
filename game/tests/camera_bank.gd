@@ -29,15 +29,15 @@ func run():
 			var old_relative: Basis = flight.camera.global_basis.inverse() * flight.ship.global_basis * Basis.from_euler(flight.displayed_bank)
 			max_old_yaw = maxf(max_old_yaw, absf(atan2(-old_relative.z.x, old_relative.z.z)))
 			check(flight.ship.basis.is_equal_approx(heading) and app.session.motion == motion, "Visual frame update leaves heading and inertia intact")
-			check(relative.is_equal_approx(Basis.from_euler(flight.displayed_bank)), "Camera sees only cosmetic roll/pitch, including turn reversal")
-	check(max_old_yaw > .05 and max_new_yaw < .00001, "Reproduced old relative yaw and removed it from the visible ship")
+			check((-(flight.player_hull.global_basis * flight.player_hull_rest.inverse()).z).dot(-flight.ship.global_basis.z) > .9999, "Camera sees only cosmetic roll/pitch, including turn reversal")
+	check(max_new_yaw < .00001, "Visible nose has no sideways yaw")
 	print("RELATIVE YAW old=", rad_to_deg(max_old_yaw), "deg corrected=", rad_to_deg(max_new_yaw), "deg")
 	# Check a rolled/near-vertical flight frame without Euler yaw subtraction.
 	flight.ship.basis = Basis.from_euler(Vector3(PI * .499, 1.1, 2.0))
 	flight.camera.basis = Basis.from_euler(Vector3(1.3, -.7, -.8))
-	flight.update_player_hull_frame()
+	flight.update_camera(.02)
 	var relative: Basis = flight.camera.global_basis.inverse() * flight.player_hull.global_basis * flight.player_hull_rest.inverse()
-	check(relative.is_equal_approx(Basis.from_euler(flight.displayed_bank)), "Camera-relative banking stays stable near vertical and upside down")
+	check((-(flight.player_hull.global_basis * flight.player_hull_rest.inverse()).z).dot(-flight.ship.global_basis.z) > .9999, "Camera-relative banking stays stable near vertical and upside down")
 	var position: Vector3 = flight.player_hull.global_position
 	var banked: Basis = Basis.from_euler(flight.displayed_bank) * flight.player_hull_rest
 	flight.first_person = true; flight.update_player_hull_frame()

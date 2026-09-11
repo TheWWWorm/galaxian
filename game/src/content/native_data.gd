@@ -358,6 +358,8 @@ func extract_content() -> Dictionary:
 		"travel": read_phase("Reading travel rules", travel_rules),
 		"sky": read_phase("Reading space backgrounds", sky_presentation),
 		"player_motion": read_phase("Reading ship motion", player_motion),
+		"flight_music": read_phase("Reading radar music transitions", flight_music),
+		"npc_projectiles": read_phase("Reading NPC projectile meshes", npc_projectiles),
 		"flight_effects": read_phase("Reading flight effects", flight_effects),
 		"fighter_steering": read_phase("Reading fighter steering", fighter_steering),
 		"fighter_evasion": read_phase("Reading fighter maneuvers", fighter_evasion),
@@ -16345,8 +16347,33 @@ func mission_outro_presentation() -> Dictionary:
 			return {}
 	var side := shifted_at(0x44b4e, 0x44b52, 3) * .02
 	return {
-		"camera_offset": [side, side, -signed_literal(0x44b58, 3) * .02],
+		"camera_offset": [side, side, signed_literal(0x44b58, 3) * .02],
 		"settle_seconds": (literal(0x44b08, 3) - literal(0x44a66, 2)) / 1000.0,
 		"music_delay": shifted_at(0x44a08, 0x44a0a, 3) / 1000.0,
 		"music": immediate_at(0x44a1c, 1)
 	}
+
+
+func flight_music() -> Dictionary:
+	for pair in [[0x58b2c, "__ZN11AbyssEngine8AERandom7nextIntEi"], [0x58b4c, "__ZN11AbyssEngine18ApplicationManager18SoundPlayMusicLoopEi"], [0x58bfe, "__ZN11AbyssEngine18ApplicationManager18SoundPlayMusicLoopEi"]]:
+		if call_target(pair[0]) != symbol_address(pair[1]):
+			fail("Unsupported radar music selection.")
+			return {}
+	return {"explore": immediate_at(0x58bf2, 1), "combat": [immediate_at(0x58b34, 0), immediate_at(0x58b3a, 1)], "combat_delay": shifted_at(0x58b10, 0x58b12, 2) / 1000.0, "explore_delay": shifted_at(0x58bde, 0x58be0, 2) / 1000.0}
+
+
+func npc_projectiles() -> Dictionary:
+	var result := {}
+	# Shared Gun pools are rendered by ObjectGun with these supplied meshes.
+	for record in [[0x2eab4, 0x2eab2, 124], [0x2eb8a, 0x2eb88, 144], [0x2ed2a, 0x2ed28, 140], [0x2ef46, 0x2ef44, 136], [0x2f0f2, 0x2f0f0, 128]]:
+		if call_target(record[0]) != symbol_address("__ZN9ObjectGunC1EiP3Gunij"):
+			fail("Unsupported NPC projectile renderer.")
+			return {}
+		result[str(record[2])] = literal(record[1], 3)
+	for address in [0x2efba, 0x2ee76]:
+		if u16(address) & 0xff00 != 0x2800:
+			fail("Unsupported NPC projectile actor selection.")
+			return {}
+	result["alien_actor"] = u16(0x2efba) & 255
+	result["turret_actor"] = u16(0x2ee76) & 255
+	return result

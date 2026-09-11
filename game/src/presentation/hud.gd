@@ -105,7 +105,7 @@ func _process(_delta: float) -> void:
 		buttons[action].self_modulate.a = 1.0 if tutorial.get("action") == action and tutorial.get("lit", false) else flight.button_opacity(action)
 	autofire_label.visible = touch_enabled and flight.controls.touch_autofire
 	queue_redraw()
-	var active: bool = not flight.paused and not flight.session.active_job.get("ready", false)
+	var active: bool = not flight.paused and not flight.outro_active and not flight.session.active_job.get("ready", false)
 	reticle.visible = active
 	objective.node.visible = active
 	for marker in targets:
@@ -393,7 +393,8 @@ func _draw() -> void:
 		var seconds := ceili(
 			maxf(0, duration - float(flight.session.active_job.elapsed_ms)) / 1000.0
 		)
-		bitmap("%02d:%02d" % [seconds / 60, seconds % 60], point + Vector2(9, 5))
+		# Match the raised digit baseline used by the survival score frame.
+		bitmap("%02d:%02d" % [seconds / 60, seconds % 60], point + Vector2(9, 2))
 	draw_set_transform(Vector2.ZERO)
 
 

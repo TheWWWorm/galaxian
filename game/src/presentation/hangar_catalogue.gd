@@ -221,6 +221,8 @@ static func information(library, pilot, entry: Dictionary) -> String:
 			values.append([labels.recharge if item.category == library.SHIELD_CATEGORY else labels.rate,"%.2f /s" % (1000.0/item.interval_ms)])
 	for pair in values:
 		result += "\n\n%s: %s" % [library.text(int(pair[0])),str(pair[1])]
+	if entry.kind == "ship":
+		result = preload("res://src/presentation/ship_slots.gd").describe(library, int(entry.id)) + "\n\n" + result
 	if entry.source == "shop" and entry.kind == "ship":
 		result += "\n\nExchanging ships transfers compatible mounted equipment; the rest goes into the hold."
 	return result

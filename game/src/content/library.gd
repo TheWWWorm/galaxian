@@ -87,6 +87,7 @@ func open(directory: String, content_id: String, language: String = "gb") -> boo
 		and valid_defeat_ui()
 		and valid_board_ui()
 		and valid_flight_ui()
+		and valid_combat_presentation()
 		and valid_map_ui()
 		and valid_travel()
 		and valid_sky()
@@ -1636,6 +1637,14 @@ func definition_weapons(definition: Dictionary, rank: int) -> Dictionary:
 			if group.has("weapon"):
 				var profile: Dictionary = group.weapon.duplicate(true)
 				profile.team = group.get("team", "enemy")
+				if not profile.has("projectile_model"):
+					var pool := int(profile.get("pool_id", -1))
+					if profile.team == "ally": pool = 128
+					elif int(group.actor) == int(content.npc_projectiles.alien_actor): pool = 144
+					elif int(group.actor) == int(content.npc_projectiles.turret_actor): pool = 136
+					elif pool < 0: pool = 140
+					var model: int = content.npc_projectiles.get(str(pool), -1)
+					if model > 0: profile.projectile_model = model
 				if profile.has("guidance"):
 					profile["guidance_target_ids"] = []
 					if profile.team == "enemy":
@@ -2964,5 +2973,20 @@ func valid_board_ui() -> bool:
 	for identifier in data.labels.values():
 		if identifier >= strings.size(): return false
 	if data.special_portrait >= content.radio_ui.portraits.size(): return false
+	error = ""
+	return true
+
+
+func valid_combat_presentation() -> bool:
+	if not preload("res://src/presentation/flight_music.gd").valid(content.get("flight_music"), content.sound_bank):
+		error = "Invalid radar music definitions. Import the IPA again."
+		return false
+	error = "Invalid NPC projectile definitions. Import the IPA again."
+	var models: Variant = content.get("npc_projectiles")
+	if not models is Dictionary: return false
+	for key in ["124", "128", "136", "140", "144"]:
+		if not content_integer(models.get(key)) or not content.resources.has(str(int(models[key]))): return false
+	for key in ["alien_actor", "turret_actor"]:
+		if not content_integer(models.get(key)) or models[key] < 0 or models[key] >= content.tables.actor_meshes.size(): return false
 	error = ""
 	return true

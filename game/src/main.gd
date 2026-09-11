@@ -53,6 +53,10 @@ var survival_archive
 var survival_panel
 var survival_name_draft := ""
 var flight_buttons := {}
+var save_dialog := FileDialog.new()
+var save_transfer := preload("res://src/simulation/save_transfer.gd").new()
+var save_picker := preload("res://src/input/save_file_picker.gd").new()
+var pending_save_export := {}
 var dialog := FileDialog.new()
 var confirmation := ConfirmationDialog.new()
 var confirm_action: Callable
@@ -67,6 +71,8 @@ var settings := {
 	"language": "gb",
 	"sensitivity": .0025,
 	"invert": false,
+	"motion_steering": false,
+	"motion_sensitivity": .5,
 	"original_flight_controls": false,
 	"aim_assist": true,
 	"targeting_reticle": null,
@@ -82,6 +88,8 @@ var settings := {
 }
 var notification_text := ""
 var notification_time := 0.0
+var motion_sensor := preload("res://src/input/motion_steering.gd").new()
+var flight_music := preload("res://src/presentation/flight_music.gd").new()
 var save_timer := 0.0
 var star_map_selection := 0
 var map_panel
@@ -105,6 +113,8 @@ func _ready() -> void:
 	setup_world()
 	setup_ui()
 	load_settings()
+	motion_sensor.notice.connect(notify)
+	if settings.motion_steering: motion_sensor.enable()
 	DisplaySettings.apply_aspect(get_window(), str(settings.aspect_ratio))
 	# Browsers require a fresh gesture to enter fullscreen; restore only native windows.
 	if not OS.has_feature("web") and not preload("res://src/presentation/bitmap_font.gd").is_mobile():
@@ -173,7 +183,7 @@ func setup_ui() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(spacer)
-	top.add_child(label("NATIVE REMAKE  /  1.0.1", 12, Color("91a7b8")))
+	top.add_child(label("NATIVE REMAKE  /  " + str(ProjectSettings.get_setting("application/config/version")), 12, Color("91a7b8")))
 	ui.add_child(status)
 	status.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	status.offset_left = 48
@@ -182,6 +192,13 @@ func setup_ui() -> void:
 	status.offset_bottom = -16
 	status.add_theme_font_size_override("font_size", 14)
 	status.modulate = Color("9daebe")
+	ui.add_child(save_dialog)
+	save_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	save_dialog.use_native_dialog = OS.has_feature("android")
+	save_dialog.filters = PackedStringArray(["*.gofsave ; Galaxy on Fire save export"])
+	save_dialog.file_selected.connect(save_file_selected)
+	save_picker.selected.connect(review_save_import)
+	save_picker.failed.connect(notify)
 	ui.add_child(dialog)
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
@@ -460,8 +477,13 @@ func show_title_menu(section: String) -> void:
 		"files":
 			entries = [
 				{"text": "Choose game IPA…", "action": "import"},
+				{"text": "Transfer saves", "action": "transfer"},
 				{"text": "About this remake", "action": "about"}
 			]
+		"transfer":
+			entries = [{"text": "Export saves…", "action": "export_saves"}, {"text": "Import saves…", "action": "import_saves"}, {"text": "Save transfer help", "action": "transfer_help"}]
+		"transfer_help":
+			body = "Move campaign, exploration and survival saves between devices or the web and native apps. Import the same game IPA on both devices first."
 		"help":
 			body = controls_help()
 		"about":
@@ -476,8 +498,12 @@ func show_title_menu(section: String) -> void:
 
 func title_action(action: String) -> void:
 	match action:
-		"main", "start", "load", "files", "help", "about":
+		"main", "start", "load", "files", "help", "about", "transfer", "transfer_help":
 			show_title_menu(action)
+		"export_saves":
+			export_saves()
+		"import_saves":
+			import_saves()
 		"options":
 			show_options()
 		"campaign":
@@ -1102,6 +1128,7 @@ func launch(resume: bool = false) -> void:
 	screen = "flight"
 	paused = false
 	flight = Flight.new()
+	flight.motion_sensor = motion_sensor
 	world.add_child(flight)
 	flight.setup(library, session, settings, resume)
 	flight.dock_requested.connect(dock)
@@ -1116,7 +1143,8 @@ func launch(resume: bool = false) -> void:
 		var failure := notification_text
 		show_pause()
 		notify(failure)
-	play_music("GalaxyOnFire1_Game")
+	flight_music.reset()
+	play_music(library.content.sound_bank[str(int(library.content.flight_music.explore))].path.get_file().get_basename())
 
 
 func stop_flight() -> void:
@@ -1731,6 +1759,10 @@ func close_options() -> void:
 
 
 func change_option(key: String, value: Variant) -> void:
+	if key == "calibrate_motion":
+		if motion_sensor.calibrate(): notify("Motion steering centered. Hold this position when resuming flight.")
+		return
+	if key == "motion_steering" and value == true: motion_sensor.enable()
 	if key == "language" and value is String and ready_content:
 		if not library.set_language(value):
 			notify(library.error)
@@ -1745,13 +1777,13 @@ func change_option(key: String, value: Variant) -> void:
 	elif key == "aspect_ratio" and value is String and DisplaySettings.RATIOS.has(value):
 		settings.aspect_ratio = value
 		DisplaySettings.apply_aspect(get_window(), value)
-	elif key in ["music_volume", "effects_volume", "sensitivity"]:
+	elif key in ["music_volume", "effects_volume", "sensitivity", "motion_sensitivity"]:
 		if not value is float and not value is int: return
 		if not is_finite(float(value)): return
 		settings[key] = clampf(float(value), .0005, .008) if key == "sensitivity" else clampf(float(value), 0, 1)
 		if key == "music_volume":
 			settings.music = settings.music_volume > 0
-	elif key in ["invert", "original_flight_controls", "aim_assist", "linked_fire", "touch", "targeting_reticle", "flight_overlays", "extra_flight_buttons"] and value is bool:
+	elif key in ["motion_steering", "invert", "original_flight_controls", "aim_assist", "linked_fire", "touch", "targeting_reticle", "flight_overlays", "extra_flight_buttons"] and value is bool:
 		settings[key] = value
 	else:
 		return
@@ -1783,7 +1815,8 @@ func load_settings() -> void:
 		if file.has_section_key("options", key):
 			settings[key] = file.get_value("options", key)
 	settings.original_flight_controls = settings.original_flight_controls == true
-	for key in ["music_volume", "effects_volume"]:
+	settings.motion_steering = settings.motion_steering == true
+	for key in ["music_volume", "effects_volume", "motion_sensitivity"]:
 		var value: Variant = settings[key]
 		settings[key] = clampf(float(value), 0, 1) if (value is float or value is int) and is_finite(float(value)) else 1.0
 
@@ -1821,6 +1854,8 @@ func notify(message: String) -> void:
 			"main",
 			message
 		)
+	elif screen == "options" and is_instance_valid(options_panel):
+		options_panel.show_notice(message)
 	elif screen == "defeat" and is_instance_valid(defeat_panel):
 		show_defeat_message(message, defeat_notice)
 	elif screen == "pause" and is_instance_valid(pause_panel):
@@ -1857,6 +1892,10 @@ func _process(delta: float) -> void:
 			options_panel.values.fullscreen = fullscreen_now
 			options_panel.show_section("display", "fullscreen")
 	record_play_time(delta, get_window().has_focus())
+	if flight != null and screen == "flight" and not flight.paused and not flight.outro_active:
+		var cue := flight_music.advance(library.content.flight_music, flight.radar_enemy_present(), session.slot == "survival", delta)
+		if cue == -2: music.stop()
+		elif cue >= 0: play_music(library.content.sound_bank[str(cue)].path.get_file().get_basename())
 	if flight != null and screen == "recovery" and flight.outro_active:
 		flight.advance_outro(delta)
 	if flight != null and screen == "flight" and flight.outro_active and not flight.outro_music_played and flight.outro_elapsed >= float(library.content.flight_effects.outro.music_delay):
@@ -2003,6 +2042,7 @@ func launch_preview() -> void:
 	screen = "flight"
 	paused = false
 	flight = Flight.new()
+	flight.motion_sensor = motion_sensor
 	world.add_child(flight)
 	flight.setup(library, session, settings)
 	flight.dock_requested.connect(dock)
@@ -2157,3 +2197,61 @@ func close_action_freeze(resume: bool) -> void:
 	clear_page()
 	if resume: resume_flight()
 	else: show_pause()
+
+
+func export_saves() -> void:
+	if session != null and not transient_preview and not save_game(false): return
+	pending_save_export = save_transfer.collect(library, save_path("campaign").get_base_dir())
+	if pending_save_export.is_empty():
+		notify(save_transfer.error)
+		return
+	var filename := "Galaxy-on-Fire-saves.gofsave"
+	if OS.has_feature("web"):
+		JavaScriptBridge.download_buffer(JSON.stringify(pending_save_export).to_utf8_buffer(), filename, "application/json")
+		notify("Save export downloaded.")
+	else:
+		save_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+		save_dialog.title = "Export saves"
+		save_dialog.current_file = filename
+		save_dialog.popup_centered(Vector2i(950, 650))
+
+
+func import_saves() -> void:
+	if OS.has_feature("web"):
+		save_picker.choose()
+	else:
+		save_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		save_dialog.title = "Import saves"
+		save_dialog.current_file = ""
+		save_dialog.popup_centered(Vector2i(950, 650))
+
+
+func save_file_selected(path: String) -> void:
+	if save_dialog.file_mode == FileDialog.FILE_MODE_OPEN_FILE:
+		review_save_import(path)
+	else:
+		if save_transfer.write(path, pending_save_export): notify("Saves exported.")
+		else: notify(save_transfer.error)
+
+
+func review_save_import(path: String) -> void:
+	var bundle := save_transfer.read_export(library, path)
+	if bundle.is_empty():
+		notify(save_transfer.error)
+		return
+	var slots: Array[String] = []
+	for filename in bundle.saves:
+		slots.append({"campaign.json": "Campaign", "free.json": "Exploration", "survival-state.json": "Survival and local scores"}[filename])
+	confirm("Import saves?", "Replace these local saves with the selected export: %s. A backup of your existing saves will be kept." % ", ".join(slots), install_save_import.bind(bundle))
+
+
+func install_save_import(bundle: Dictionary) -> void:
+	if not save_transfer.install(library, save_path("campaign").get_base_dir(), bundle):
+		notify(save_transfer.error)
+		return
+	# Drop old in-memory pilots so autosave cannot overwrite the imported data.
+	session = null
+	survival_archive = null
+	defeated_session = null
+	show_title_menu("load")
+	notify("Saves imported. Choose a pilot to continue, or open Survival.")

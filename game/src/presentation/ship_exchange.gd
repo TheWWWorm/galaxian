@@ -82,6 +82,7 @@ func configure(source, reviewed: Dictionary) -> void:
 func explanation() -> String:
 	var binding: Dictionary = library.content.hangar_ui.description.ships
 	var text: String = library.text(int(binding.base + binding.stride * int(quote.offer.id)))
+	text += "\n\n" + preload("res://src/presentation/ship_slots.gd").describe(library, int(quote.offer.id))
 	text += "\n\nYour current ship is traded in. All equipment and cargo are kept. Compatible equipment stays mounted; other equipment moves to the hold."
 	if not quote.transfer.is_empty():
 		var moved: int = quote.transfer.hold.size() - quote.loadout.hold.size()
