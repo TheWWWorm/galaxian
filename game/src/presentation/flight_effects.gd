@@ -208,15 +208,21 @@ static func star_mesh(uv: Array) -> ArrayMesh:
 	return mesh
 
 
-func advance(seconds: float, pose: Transform3D, boosting: bool, amount: float) -> void:
+func advance(
+	seconds: float, pose: Transform3D, boosting: bool, amount: float, travel: float = 1.0
+) -> void:
 	if seconds <= 0 or not is_finite(seconds):
 		return
+	# The supplied field drifts at a fixed rate because the original hull always
+	# cruises. Throttle is a remake control, so the dust follows the actual speed
+	# and holds still when the ship does. Boost keeps its imported rate.
+	var rate: float = 1.0 if boosting else clampf(travel, 0.0, 1.0)
 	pending += seconds
 	while pending + .000000001 >= float(data.reference_seconds):
 		var dt: float = data.reference_seconds
 		pending = maxf(0, pending - dt)
 		spawn_elapsed += dt
-		var can_spawn: bool = boosting or spawn_elapsed >= float(data.normal_interval)
+		var can_spawn: bool = boosting or (rate > 0 and spawn_elapsed >= float(data.normal_interval))
 		for particle in particles:
 			particle.life -= dt
 			if particle.life <= 0:
@@ -245,7 +251,9 @@ func advance(seconds: float, pose: Transform3D, boosting: bool, amount: float) -
 			else:
 				if boosting:
 					particle.speed = data.boost_speed_base + data.boost_speed * amount
-				particle.node.position += particle.node.basis.z.normalized() * particle.speed * dt
+				particle.node.position += (
+					particle.node.basis.z.normalized() * particle.speed * rate * dt
+				)
 			var width: float = data.half_width + (data.boost_width * amount if boosting else 0.0)
 			var length: float = data.half_length + (data.boost_length * amount if boosting else 0.0)
 			particle.node.scale = Vector3(width, width, length)

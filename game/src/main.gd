@@ -356,6 +356,8 @@ func clear_page() -> void:
 		child.queue_free()
 	if hud != null and is_instance_valid(hud):
 		hud.set_process_input(false)
+		# Stop its cinematic visibility tracking before the node is discarded.
+		hud.set_process(false)
 		hud.hide()
 		hud.queue_free()
 		hud = null

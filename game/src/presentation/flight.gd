@@ -654,7 +654,13 @@ func step(dt: float) -> void:
 					return
 	update_player_exhaust(forward_travel / dt, 0.0 if frozen else dt)
 	if not frozen:
-		flight_effects.advance(dt, ship.global_transform, boosting(), FlightEffects.percentage(library.content.flight_effects, boost_elapsed()))
+		flight_effects.advance(
+			dt,
+			ship.global_transform,
+			boosting(),
+			FlightEffects.percentage(library.content.flight_effects, boost_elapsed()),
+			forward_travel / dt / float(library.content.player_motion.cruise_speed)
+		)
 	spawn_targets()
 	for actor in actors:
 		if not is_instance_valid(actor.node):
@@ -668,10 +674,8 @@ func step(dt: float) -> void:
 		elif actor.state.has("heading"):
 			var heading: Vector3 = session.Combat.vector(actor.state.heading)
 			node.basis = session.Mission.Frame.axes(heading, session.Combat.vector(actor.state.up))
-		elif not session.mission_definition().groups[int(actor.state.group)].get(
-			"source_scale", false
-		):
-			node.rotate_y(dt * .16)
+		else:
+			orient_placed_actor(node, session.mission_definition().groups[int(actor.state.group)], dt)
 		if not frozen and node.has_meta("ship_trails"):
 			node.get_meta("ship_trails").advance(dt, node.global_transform)
 	advance_projectiles(dt, previous_player)
@@ -688,6 +692,22 @@ func step(dt: float) -> void:
 			update_objective()
 	update_objective(false)
 	finish_if_ready()
+
+
+func orient_placed_actor(node: Node3D, group: Dictionary, dt: float) -> void:
+	## Supplied PlayerStatic bodies never steer: mission hulls keep the heading
+	## they were placed with. Only unplaced scenery debris tumbles.
+	if group.get("source_scale", false):
+		return
+	if group.get("behavior") == "transit":
+		var course: Vector3 = session.Combat.vector(group.get("velocity", [0, 0, 0]))
+		if course.length_squared() > .000001:
+			node.basis = session.Mission.Frame.axes(course.normalized(), Vector3.UP)
+		return
+	if group.has("behavior"):
+		# Stationary hulls and capital ships hold their placement orientation.
+		return
+	node.rotate_y(dt * .16)
 
 
 func finish_if_ready() -> bool:

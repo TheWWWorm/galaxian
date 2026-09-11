@@ -108,7 +108,8 @@ to hide the added objective, speed/autopilot readout and notifications. Disable
 the original touch controls. Mission dialogue and required confirmations remain
 visible. **Show touch controls** controls all flight action buttons.
 
-On touchscreens, use the centered joystick or drag empty flight space to steer.
+On touchscreens, steer with the centered joystick; it keeps following your finger
+across the screen once you have grabbed it.
 Hold **Fire** to shoot, or **double-tap Fire** to enable autofire. **AUTO** appears
 on the fire button while enabled; tap Fire once to stop. Pausing clears autofire.
 Touch instructions appear first under **Options → Controls → Help** when touch

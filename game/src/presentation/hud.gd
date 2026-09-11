@@ -15,8 +15,7 @@ var stick_center := Vector2.ZERO
 var stick_finger := -1
 var stick_vector := Vector2.ZERO
 var action_fingers := {}
-var drag_finger := -1
-var drag_origin := Vector2.ZERO
+var cinematic_hidden := false
 var reticle := TextureRect.new()
 var autofire_label := Label.new()
 var radar_art := {}
@@ -88,8 +87,16 @@ func create_marker(color: Color, navigation: bool) -> Dictionary:
 func _process(_delta: float) -> void:
 	if flight == null or not is_instance_valid(flight):
 		return
-	if flight.paused or flight.cinematic_locked() or not touch_enabled:
+	var cinematic: bool = flight.cinematic_locked()
+	if flight.paused or cinematic or not touch_enabled:
 		reset_touch()
+	# Supplied MGame::OnRender2D skips the ego bars, radar and Hud draw entirely
+	# while its level script owns the scene, and ignores touch for that time.
+	if cinematic != cinematic_hidden:
+		cinematic_hidden = cinematic
+		visible = not cinematic
+	if cinematic:
+		return
 	if not survival_rules.is_empty():
 		var director: Dictionary = flight.session.active_job.survival
 		SurvivalFeedback.advance(
@@ -413,14 +420,6 @@ func _input(event: InputEvent) -> void:
 			if control.is_visible_in_tree() and control.get_global_rect().has_point(event.position):
 				get_viewport().set_input_as_handled()
 				return
-	if (event is InputEventScreenDrag or event is InputEventScreenTouch) and event.index == drag_finger:
-		if event is InputEventScreenTouch and not event.pressed:
-			drag_finger = -1
-			flight.controls.touch_look = Vector2.ZERO
-		elif event is InputEventScreenDrag:
-			flight.controls.touch_look = ((event.position - drag_origin) / (float(flight.library.content.flight_ui.artwork.layout.stick_radius) * factor)).limit_length()
-		get_viewport().set_input_as_handled()
-		return
 	if event is InputEventScreenTouch:
 		if not event.pressed and action_fingers.has(event.index):
 			var action: String = action_fingers[event.index]
@@ -454,7 +453,6 @@ func _input(event: InputEvent) -> void:
 			touch_enabled
 			and event.pressed
 			and stick_finger < 0
-			and drag_finger < 0
 			and Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(
 				event.position
 			)
@@ -486,22 +484,8 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	# Empty-space steering reaches here only after buttons and modal UI had their
-	# chance to consume it. It shares ownership with the fixed stick above.
-	if flight == null or flight.paused or flight.cinematic_locked() or not visible or not touch_enabled:
-		return
-	if event is InputEventScreenTouch and event.pressed:
-		if stick_finger < 0 and drag_finger < 0:
-			drag_finger = event.index
-			drag_origin = event.position
-			flight.controls.touch_look = Vector2.ZERO
-		get_viewport().set_input_as_handled()
-
-
 func reset_touch() -> void:
 	stick_finger = -1
-	drag_finger = -1
 	stick_vector = Vector2.ZERO
 	for control: BaseButton in buttons.values():
 		control.set_pressed_no_signal(false)

@@ -72,8 +72,11 @@ func reading() -> Vector3:
 
 
 static func angles(gravity: Vector3) -> Vector2:
+	## Screen-space gravity points down at rest, so the vertical term reads zero
+	## there. Rolling the phone left tips screen-down toward -X, which has to read
+	## as steering left, matching a stick pushed left.
 	var unit := gravity.normalized()
-	return Vector2(atan2(-unit.x, sqrt(unit.y * unit.y + unit.z * unit.z)), atan2(unit.z, -unit.y))
+	return Vector2(atan2(unit.x, sqrt(unit.y * unit.y + unit.z * unit.z)), atan2(unit.z, -unit.y))
 
 
 func calibrate() -> bool:

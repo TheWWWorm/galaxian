@@ -98,7 +98,8 @@ func check_motion():
 	check(
 		sensor.sample(Vector3(0, -9.8, 0), .1, .5) == Vector2.ZERO, "Motion centers on first sample"
 	)
-	check(sensor.sample(Vector3(-3, -9, 0), 1, .5).x > .5, "Right tilt steers right")
+	# Screen-space gravity points down, so a right-edge-down roll tips it to +X.
+	check(sensor.sample(Vector3(3, -9, 0), 1, .5).x > .5, "Right tilt steers right")
 	check(sensor.sample(Vector3(0, -9, -3), 1, .5).y < -.5, "Forward tilt changes pitch")
 	check(sensor.sample(Vector3.ZERO, 1, .5) == Vector2.ZERO, "Missing sensor never turns ship")
 	check(

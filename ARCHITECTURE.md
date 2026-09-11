@@ -1012,7 +1012,12 @@ uses the supplied footer buttons. Its tiny header-image binding remains unresolv
 
 `hangar_ui.scene` supplies the race-to-interior/light associations, shadow meshes,
 parking positions, ship orientation and entrance camera constants. HangarScene
-loads authored dimensions and uses the existing Hangar lighting profile. It receives
+loads authored dimensions and uses the existing Hangar lighting profile. Imported
+meshes and placements store reflected Z, which is invisible wherever a camera only
+tracks a target but reverses screen-right for an imported camera basis. This is the
+only scene that adopts a supplied camera orientation, so its content is presented
+on a stage in supplied axes and the camera reads those axes directly. The recovered
+right column is then the on-screen right axis, matching the original view. It receives
 only the current ship and market snapshot; repeated stock quantities occupy separate
 supplied positions. Unsupported overflow is reported without replacing the previous
 display. Purchase refresh builds replacement hulls atomically, preserving the camera
@@ -1163,7 +1168,10 @@ imported burner envelope as NPC engines, driven by its explicit boost state. A
 successful activation plays the registered cue on the effects bus. Boost FOV,
 particles, exhaust and sound apply to both steering modes. Native particle updates
 normalize the source's frame-based movement to simulation time; pausing freezes
-feedback. Cosmetic particle positions and trail history are recreated on load.
+feedback. The imported field drifts at a fixed rate because the original hull always
+cruises, so the remake's throttle scales that drift by the measured forward travel
+and stops spawning while the ship is stationary; boost keeps its imported rate.
+Cosmetic particle positions and trail history are recreated on load.
 
 Fighter ribbons reuse the imported trail material, widths and history capacities.
 Allegiance selects campaign colors; Survival archetypes select the imported tier
@@ -1218,10 +1226,26 @@ then tracks its flyby from a fixed world position. Existing projectiles and wrec
 use detached cosmetic clocks; freighters keep their transit velocity while rewards
 and simulation remain settled.
 
+While a scripted sequence owns the scene the flight HUD is hidden entirely, matching
+the supplied render pass that skips the ego bars, radar and Hud draw and ignores
+touch for that time. Mission dialogue is drawn outside that pass and stays visible,
+as it does for ordinary radio messages during play. Keyboard and controller pause
+remain available as a remake convenience.
+
+Touch steering belongs to the supplied stick alone. Once grabbed it follows the
+finger anywhere on screen, clamped to the authored radius, as the source does;
+empty space no longer starts a steering gesture.
+
+Supplied static bodies never steer, so placed mission hulls keep the orientation
+they were given: transit groups face their imported velocity and stationary hulls
+hold their placement. Only scenery debris with no declared behavior still tumbles.
+
 MotionSteering supplies optional calibrated gravity-based phone tilt with a dead
 zone, smoothing, sensitivity and recentering. Native gravity/accelerometer and browser
-DeviceMotion inputs are supported. Absolute tilt avoids integrated gyro drift;
-this is not a reconstruction of GOF2 sensor tuning. Device testing is still pending.
+DeviceMotion inputs are supported, both normalized to screen-space gravity pointing
+down at rest, so a right-edge-down roll steers right like a stick pushed right.
+Absolute tilt avoids integrated gyro drift; this is not a reconstruction of GOF2
+sensor tuning. Only the horizontal direction has been corrected from device reports.
 
 Ship catalogue information and exchange confirmation list supplied mount counts
 for each weapon category, including unsupported categories with zero slots.

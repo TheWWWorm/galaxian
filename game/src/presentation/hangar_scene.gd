@@ -4,6 +4,7 @@ const Combat = preload("res://src/simulation/combat.gd")
 const Mission = preload("res://src/simulation/mission.gd")
 var data: Dictionary
 var camera: Camera3D
+var stage: Node3D
 var hulls: Node3D
 var interior: Node3D
 var library
@@ -75,8 +76,15 @@ func configure(source, location: int, ship: int, offers: Array) -> bool:
 	var alternate: bool = int(library.station_definition(location).race) == int(data.race)
 	library.set_lighting(0, 0, location, true)
 	var definition: Dictionary = data.interiors.race if alternate else data.interiors.default
+	# Supplied meshes and placements are stored with reflected Z. That reflection
+	# is invisible while a camera only tracks a target, but this scene imports the
+	# original camera basis, whose screen-right axis a reflected stage reverses.
+	# Presenting the stage back in source coordinates keeps the imported view.
+	stage = Node3D.new()
+	stage.scale = Vector3(1, 1, -1)
+	add_child(stage)
 	interior = Node3D.new()
-	add_child(interior)
+	stage.add_child(interior)
 	for key in ["body", "lights"]:
 		if not add_resource(interior, int(definition[key])):
 			return false
@@ -124,7 +132,7 @@ func refresh_inventory(ship: int, offers: Array) -> bool:
 		hulls.hide()
 		hulls.queue_free()
 	hulls = replacement
-	add_child(hulls)
+	stage.add_child(hulls)
 	player_ship = ship
 	inventory = stock
 	error = ""
@@ -165,6 +173,11 @@ func add_ship(parent: Node3D, ship: int, position_data: Array) -> bool:
 	return add_resource(shadow, int(data.shadows[str(actor)]))
 
 
+static func view_point(value: Array) -> Vector3:
+	## Camera coordinates stay in supplied axes; the stage carries the reflection.
+	return Vector3(value[0], value[1], value[2]) * .02
+
+
 func _process(seconds: float) -> void:
 	advance(seconds)
 
@@ -181,7 +194,7 @@ func advance(seconds: float) -> void:
 
 func sync_camera() -> void:
 	if elapsed >= float(data.camera.entrance_seconds):
-		camera.position = Mission.point(Combat.packed(drift.position))
+		camera.position = view_point(Combat.packed(drift.position))
 		camera.fov = float(data.drift.fov_units) * 360.0 / 65536.0
 		camera.near = float(data.drift.near) * .02
 		camera.far = float(data.drift.far) * .02
@@ -189,11 +202,12 @@ func sync_camera() -> void:
 		return
 	var progress := clampf(elapsed / float(data.camera.entrance_seconds), 0, 1)
 	var eased := (1.0 - cos(PI * progress)) * .5
-	camera.position = Mission.point([
+	camera.position = view_point([
 		camera_x, data.camera.y, lerpf(data.camera.z_start, data.camera.z_end, eased)
 	])
-	# Source view matrices face opposite their third column. Reflect source Z,
-	# then let Godot construct its camera basis from the recovered view vectors.
-	var forward := Mission.point(data.camera.forward).normalized()
-	var up := Mission.point(data.camera.up).normalized()
+	# Source view matrices face opposite their third column, already reflected by
+	# the reader. Godot then derives screen-right from these two view vectors, and
+	# the supplied basis is right-handed, so no further axis reflection applies.
+	var forward := view_point(data.camera.forward).normalized()
+	var up := view_point(data.camera.up).normalized()
 	camera.look_at(camera.global_position + forward, up)
