@@ -387,16 +387,18 @@ func cycle_time() -> void:
 
 
 func danger() -> bool:
-	return (
-		cinematic_locked()
-		or actors.any(hostile)
-		or recent_damage > 0
-		or session.combat.projectiles.any(hostile_shot)
+	if cinematic_locked() or actors.any(hostile) or recent_damage > 0:
+		return true
+	if session.combat.projectiles.is_empty():
+		return false
+	# Weapon profiles are rebuilt from the mission on every request, so reading
+	# them once per test rather than once per shot keeps a sky full of the
+	# player's own bolts off the frame budget. Time acceleration checks this
+	# after every substep, which multiplied the old per-shot rebuild.
+	var profiles: Dictionary = session.actor_weapons()
+	return session.combat.projectiles.any(
+		func(shot): return session.Combat.team(int(shot.weapon), library, profiles) == "enemy"
 	)
-
-
-func hostile_shot(shot: Dictionary) -> bool:
-	return session.Combat.team(int(shot.weapon), library, session.actor_weapons()) == "enemy"
 
 
 func try_dock() -> void:
@@ -1022,10 +1024,7 @@ func sync_projectiles(advance_trails: bool = false) -> void:
 				node.mesh = bolt_mesh
 				node.material_override = (
 					enemy_bolt_material
-					if (
-						session.Combat.team(int(shot.weapon), library, session.actor_weapons())
-						== "enemy"
-					)
+					if session.Combat.team(int(shot.weapon), library, profiles) == "enemy"
 					else bolt_material
 				)
 			add_child(node)

@@ -229,6 +229,8 @@
     "game/tests/feedback12.gd.uid",
     "game/tests/feedback13.gd",
     "game/tests/feedback13.gd.uid",
+    "game/tests/feedback14.gd",
+    "game/tests/feedback14.gd.uid",
     "game/tests/flight_effects.gd",
     "game/tests/flight_effects.gd.uid",
     "game/tests/flight_modes.gd",

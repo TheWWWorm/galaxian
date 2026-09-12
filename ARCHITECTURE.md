@@ -529,6 +529,16 @@ projectile. Hits and expiry release slots. Old saves retain any excess live shot
 from earlier previews; emissions resume only after the pool drains below capacity.
 No save layout changes are required because occupancy is derived from projectiles.
 
+Time acceleration and autopilot are native extensions, so their threat test is
+native code as well. It asks whether any live projectile belongs to a hostile
+weapon, and weapon profiles are rebuilt from the mission on every request. The
+test now reads that table once instead of once per projectile, and skips it
+entirely when a cinematic, a hostile actor or recent damage already answers, or
+when no projectile is live. A hostile actor short-circuits the scan, so the cost
+only ever appeared with none present: firing into empty space with a fast gun.
+Behaviour is unchanged; only the number of rebuilds is. Projectile visuals read
+the same table once per synchronization rather than once per newly created bolt.
+
 
 ## Distant flight backgrounds
 
