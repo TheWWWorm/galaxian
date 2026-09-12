@@ -1,6 +1,12 @@
 extends Node3D
 ## Native, cosmetic flight feedback from imported declarations. No gameplay RNG.
 const Combat = preload("res://src/simulation/combat.gd")
+# Below this share of cruise the speed cue stops spawning. It is a judgement
+# call, not a recovered constant: the imported geometry only fixes the floor
+# below which a speck provably expires before reaching the camera, which is a
+# third here, and specks still read as sluggish well above that. Reported as
+# looking slow around this figure, so this is where the cue is cut.
+const CUE_MINIMUM := .45
 var data := {}
 var particles: Array = []
 var random := RandomNumberGenerator.new()
@@ -141,6 +147,20 @@ static func valid(value: Variant, materials: Dictionary, styles: Dictionary) -> 
 	return true
 
 
+static func cue_threshold(stars: Dictionary) -> float:
+	## These specks run fifteen to thirty times faster than the hull itself, so
+	## they are a speed cue, not matter the ship passes. A speck that cannot
+	## reach the camera inside its life visibly expires on screen, which the
+	## imported spawn depth, slowest speed and lifetime place at a third of
+	## cruise. Sluggish motion starts well above that, so the calibrated minimum
+	## normally decides; the imported floor only guards unusual content.
+	var span: float = float(stars.normal_speed_min) * float(stars.normal_lifetime)
+	var floor_ratio: float = (
+		clampf(float(stars.spawn_depth) / span, 0.0, 1.0) if span > 0 else 0.0
+	)
+	return maxf(CUE_MINIMUM, floor_ratio)
+
+
 static func percentage(parameters: Dictionary, elapsed: float) -> float:
 	var phase := maxf(0.0, elapsed) / float(parameters.ramp_seconds)
 	if phase <= float(parameters.plateau):
@@ -214,15 +234,28 @@ func advance(
 	if seconds <= 0 or not is_finite(seconds):
 		return
 	# The supplied field drifts at a fixed rate because the original hull always
-	# cruises. Throttle is a remake control, so the dust follows the actual speed
-	# and holds still when the ship does. Boost keeps its imported rate.
+	# cruises. Throttle is a remake control, so the cue follows the actual speed.
+	# Boost keeps its imported rate.
 	var rate: float = 1.0 if boosting else clampf(travel, 0.0, 1.0)
+	var threshold := cue_threshold(data)
+	var drift: float = 1.0 if boosting else maxf(rate, threshold)
+	var cue: bool = boosting or rate >= threshold
+	if rate <= 0:
+		# Slowing past the threshold already empties the field on its own. This
+		# is the backstop for reaching a standstill before that finishes, so a
+		# stopped ship never keeps a speck it can no longer be moving past.
+		for particle in particles:
+			particle.node.hide()
+			particle.life = 0.0
+		pending = 0.0
+		spawn_elapsed = float(data.normal_interval)
+		return
 	pending += seconds
 	while pending + .000000001 >= float(data.reference_seconds):
 		var dt: float = data.reference_seconds
 		pending = maxf(0, pending - dt)
 		spawn_elapsed += dt
-		var can_spawn: bool = boosting or (rate > 0 and spawn_elapsed >= float(data.normal_interval))
+		var can_spawn: bool = boosting or (cue and spawn_elapsed >= float(data.normal_interval))
 		for particle in particles:
 			particle.life -= dt
 			if particle.life <= 0:
@@ -252,8 +285,15 @@ func advance(
 				if boosting:
 					particle.speed = data.boost_speed_base + data.boost_speed * amount
 				particle.node.position += (
-					particle.node.basis.z.normalized() * particle.speed * rate * dt
+					particle.node.basis.z.normalized() * particle.speed * drift * dt
 				)
 			var width: float = data.half_width + (data.boost_width * amount if boosting else 0.0)
-			var length: float = data.half_length + (data.boost_length * amount if boosting else 0.0)
+			# The supplied boost stretches length alone and leaves width at zero
+			# gain, so length is the speed smear and width is the speck. Throttle
+			# scales the smear the same way, at the rate the speck is drifting.
+			var length: float = (
+				data.half_length + data.boost_length * amount
+				if boosting
+				else data.half_length * drift
+			)
 			particle.node.scale = Vector3(width, width, length)

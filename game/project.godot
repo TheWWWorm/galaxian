@@ -3,7 +3,7 @@ config_version=5
 [application]
 config/name="Galaxy on Fire — Native Remake"
 config/icon="res://icon.svg"
-config/version="1.0.9"
+config/version="1.0.10"
 run/main_scene="res://scenes/main.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="gof1-remake"

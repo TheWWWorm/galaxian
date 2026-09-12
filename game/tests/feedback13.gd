@@ -94,26 +94,157 @@ func check_dust(lib) -> void:
 		effects.advance(float(data.reference_seconds), pose, false, 0.0, 1.0)
 	var moving: Array = effects.particles.filter(func(p): return p.node.visible)
 	check(not moving.is_empty(), "Cruising spawns the supplied dust field")
-	var held := moving.map(func(p): return p.node.position)
-	for step in 40:
-		effects.advance(float(data.reference_seconds), pose, false, 0.0, 0.0)
-	var still := true
-	for index in moving.size():
-		if moving[index].node.position != held[index]:
-			still = false
-	check(still, "Stopped ship holds the dust in place")
+	# Kept for the throttle comparison below, before the field is cleared.
+	var snapshot := effects.particles.map(
+		func(p): return {"position": p.node.position, "life": p.life, "shown": p.node.visible}
+	)
+	# The supplied lifetime recycles a field the original hull was always flying
+	# through. At a standstill it used to retire the field one speck at a time
+	# over two seconds; the whole field now goes at once.
+	effects.advance(float(data.reference_seconds), pose, false, 0.0, 0.0)
+	check(
+		effects.particles.all(func(p): return not p.node.visible),
+		"A stopped ship clears the whole dust field in one step"
+	)
 	var before: int = effects.spawned
 	for step in 40:
 		effects.advance(float(data.reference_seconds), pose, false, 0.0, 0.0)
 	check(effects.spawned == before, "Stopped ship spawns no further dust")
-	# Compare the same populated field advanced from one state at two throttles.
-	var snapshot := effects.particles.map(
-		func(p): return {"position": p.node.position, "life": p.life, "shown": p.node.visible}
+	check(
+		effects.particles.all(func(p): return not p.node.visible),
+		"A stopped ship keeps the field clear"
 	)
+	# Boost moves the hull whatever the throttle reads, so its dust still runs.
+	effects.advance(float(data.reference_seconds), pose, true, 1.0, 0.0)
+	check(
+		effects.particles.any(func(p): return p.node.visible),
+		"Boosting from a standstill still shows dust"
+	)
+	# Stopping again, then resuming, should start refilling on the first step
+	# rather than after another spawn interval spent waiting.
+	effects.advance(float(data.reference_seconds), pose, false, 0.0, 0.0)
+	var resumed: int = effects.spawned
+	effects.advance(float(data.reference_seconds), pose, false, 0.0, 1.0)
+	check(effects.spawned == resumed + 1, "Throttling up spawns again on the first step")
 	var slow_reach: float = stepped(effects, snapshot, data, .25)
 	var fast_reach: float = stepped(effects, snapshot, data, 1.0)
 	check(slow_reach > 0 and slow_reach < fast_reach * .6, "Dust travel follows the throttle")
+	check_dust_pace(lib)
 	effects.free()
+
+
+func check_dust_pace(lib) -> void:
+	## These specks run 15 to 30 times faster than the hull, so they are a speed
+	## cue, not matter being passed. A speck must reach the camera inside its
+	## life or it dies on screen, which is what made a crawling ship look wrong.
+	var data: Dictionary = lib.content.flight_effects.stars
+	var pose := Transform3D.IDENTITY
+	var threshold := FlightEffects.cue_threshold(data)
+	var imported_floor: float = (
+		float(data.spawn_depth)
+		/ (float(data.normal_speed_min) * float(data.normal_lifetime))
+	)
+	check(
+		threshold >= imported_floor and threshold < .95,
+		"The cue threshold never drops below the imported floor (%f vs %f)"
+		% [threshold, imported_floor]
+	)
+	check(
+		is_equal_approx(threshold, FlightEffects.CUE_MINIMUM),
+		"This content is cut at the calibrated minimum, not the imported floor"
+	)
+
+	# Above the threshold the cue spawns; below it, it stops.
+	for probe in [{"rate": threshold + .05, "spawns": true}, {"rate": threshold - .05, "spawns": false}]:
+		var effects := FlightEffects.new()
+		effects.configure(lib)
+		for step in 60:
+			effects.advance(float(data.reference_seconds), pose, false, 0.0, probe.rate)
+		check(
+			(effects.spawned > 0) == probe.spawns,
+			"Throttle %f %s the cue" % [probe.rate, "spawns" if probe.spawns else "stops"]
+		)
+		effects.free()
+
+	# Below the threshold an already populated field must drain rather than
+	# freeze: no replacements, and the survivors keep drifting out.
+	var effects := FlightEffects.new()
+	effects.configure(lib)
+	for step in 200:
+		effects.advance(float(data.reference_seconds), pose, false, 0.0, 1.0)
+	check(
+		effects.particles.any(func(p): return p.node.visible), "Cruising fills the field"
+	)
+	var tracked: Dictionary = effects.particles.filter(func(p): return p.node.visible)[0]
+	var before: Vector3 = tracked.node.position
+	effects.advance(float(data.reference_seconds), pose, false, 0.0, .02)
+	check(
+		tracked.node.position.distance_to(before) > 0.0,
+		"A barely moving ship still drifts its remaining specks out"
+	)
+	var held: int = effects.spawned
+	var steps := 0
+	while effects.particles.any(func(p): return p.node.visible) and steps < 400:
+		effects.advance(float(data.reference_seconds), pose, false, 0.0, .02)
+		steps += 1
+	check(steps < 400, "The field empties itself below the threshold")
+	check(effects.spawned == held, "Nothing is respawned while emptying")
+	# The floor keeps that drain brisk instead of leaving specks crawling.
+	check(
+		float(steps) * float(data.reference_seconds) <= float(data.normal_lifetime) + .1,
+		"Emptying takes no longer than one supplied lifetime"
+	)
+	effects.free()
+
+	# Lifetime is a wall clock again: there is no real path for a speck to cover.
+	var timed := FlightEffects.new()
+	timed.configure(lib)
+	var waited := 0
+	while timed.particles.all(func(p): return not p.node.visible) and waited < 400:
+		timed.advance(float(data.reference_seconds), pose, false, 0.0, 1.0)
+		waited += 1
+	var speck: Dictionary = timed.particles.filter(func(p): return p.node.visible)[0]
+	var alive := 0
+	while alive < 400:
+		var remaining: float = speck.life
+		timed.advance(float(data.reference_seconds), pose, false, 0.0, 1.0)
+		alive += 1
+		if speck.life <= 0 or speck.life > remaining:
+			break
+	check(
+		absf(float(alive) * float(data.reference_seconds) - float(data.normal_lifetime)) < .1,
+		"A speck keeps the supplied lifetime"
+	)
+	timed.free()
+
+	# Length is the speed smear: the supplied boost adds 90 to it and 0 to width.
+	var shaped := FlightEffects.new()
+	shaped.configure(lib)
+	var settle := 0
+	while shaped.particles.all(func(p): return not p.node.visible) and settle < 400:
+		shaped.advance(float(data.reference_seconds), pose, false, 0.0, 1.0)
+		settle += 1
+	var shown: Dictionary = shaped.particles.filter(func(p): return p.node.visible)[0]
+	check(
+		is_equal_approx(shown.node.scale.z, float(data.half_length)),
+		"At cruise the streak keeps its supplied length"
+	)
+	var cruise_width: float = shown.node.scale.x
+	shaped.advance(float(data.reference_seconds), pose, false, 0.0, threshold)
+	check(
+		shown.node.scale.z < float(data.half_length) * .5,
+		"A slow ship shortens the streak toward a point"
+	)
+	check(
+		is_equal_approx(shown.node.scale.x, cruise_width),
+		"Throttle does not change the speck's width"
+	)
+	shaped.advance(float(data.reference_seconds), pose, true, 1.0, 0.0)
+	check(
+		is_equal_approx(shown.node.scale.z, float(data.half_length) + float(data.boost_length)),
+		"Boost keeps its supplied stretched streak"
+	)
+	shaped.free()
 
 
 func stepped(effects, snapshot: Array, data: Dictionary, rate: float) -> float:

@@ -1192,8 +1192,23 @@ successful activation plays the registered cue on the effects bus. Boost FOV,
 particles, exhaust and sound apply to both steering modes. Native particle updates
 normalize the source's frame-based movement to simulation time; pausing freezes
 feedback. The imported field drifts at a fixed rate because the original hull always
-cruises, so the remake's throttle scales that drift by the measured forward travel
-and stops spawning while the ship is stationary; boost keeps its imported rate.
+cruises. The specks travel fifteen to thirty times faster than the hull itself and
+six to twelve times faster than a boosting one, so they are a speed cue rather
+than matter the ship passes; nothing about them is treated as world geometry. A
+speck has to reach the camera inside its supplied lifetime or it visibly expires
+on screen, and the slowest supplied speck stops managing that below spawn depth
+over speed times lifetime, a third of cruise for this content. That imported
+ratio is only the floor, though; the specks still read as sluggish well above it,
+so the cue is cut at a calibrated minimum of 45% of cruise, whichever is higher.
+The minimum is a judgement call and is the only chosen number here. Below the
+cutoff the field drains and is not replaced, emptying within one supplied
+lifetime.
+Surviving specks drift at no less than that ratio so a crawl clears briskly
+instead of hanging. Lifetime and spawn cadence stay the supplied wall-clock
+values. Because the supplied boost stretches sprite length alone and adds no
+width, length is treated as the speed smear and throttle scales it the same way.
+Reaching a standstill retires whatever is left, as a backstop. Boost keeps its
+imported rate, streak and field at any throttle.
 Cosmetic particle positions and trail history are recreated on load.
 
 Fighter ribbons reuse the imported trail material, widths and history capacities.
