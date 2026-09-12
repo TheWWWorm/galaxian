@@ -539,6 +539,19 @@ only ever appeared with none present: firing into empty space with a fast gun.
 Behaviour is unchanged; only the number of rebuilds is. Projectile visuals read
 the same table once per synchronization rather than once per newly created bolt.
 
+The weapon table itself is assembled per request, and flight asks for it several
+times per simulation substep. Its player half derives only from the catalogue and
+the mission's target list, and every consumer reads it, so it is built once per
+distinct target list and kept on the library beside the mesh and texture caches.
+Actor guns are still assembled per request, because the directed-fire targets in
+them are rewritten there. Nothing is cached across a reopened content directory.
+
+Ballistic sweeps read each target's identity, side and swept volume once per
+advance rather than once per projectile tested against it, and a shooter's own
+side once per projectile rather than once per target. An asteroid field supplies
+eighty targets, so that inner product dominated a sustained burst. The geometry
+of the sweep, the nearest-impact rule and directed fire are unchanged.
+
 
 ## Distant flight backgrounds
 

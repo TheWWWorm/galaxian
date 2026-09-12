@@ -105,6 +105,28 @@ static func weapon_ids(weapon: int, library) -> Array[int]:
 
 
 static func profiles(library, target_ids: Array) -> Dictionary:
+	# These derive only from the content catalogue and the mission's target list,
+	# and every consumer reads them. Flight asks for the weapon table several
+	# times per simulation substep, so the player half is built once per distinct
+	# target list and kept on the library beside its mesh and texture caches.
+	# Actor guns stay per call: their directed-fire targets are rewritten there.
+	var cache: Dictionary = library.player_profile_cache
+	var entry: Dictionary = cache.get(target_ids.size(), {})
+	if entry.get("targets") == target_ids:
+		return entry.profiles
+	var built := build(library, target_ids)
+	# Served by reference to every consumer, so a stray write would reach the next
+	# reader instead of being discarded with a per-call table. Locking it turns
+	# that into an immediate error rather than a quiet one. A deep copy of the
+	# table, which the mission outro takes, is writable as before.
+	for id in built:
+		built[id].make_read_only()
+	built.make_read_only()
+	cache[target_ids.size()] = {"targets": target_ids.duplicate(), "profiles": built}
+	return built
+
+
+static func build(library, target_ids: Array) -> Dictionary:
 	var result := {}
 	for key in library.content.player_armament:
 		var weapon := int(key)

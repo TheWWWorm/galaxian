@@ -32,6 +32,7 @@ var radio_atlases := {}
 var radio_lines_cache := {}
 var contract_names := {}
 var sound_cache := {}
+var player_profile_cache := {}
 
 
 func open(directory: String, content_id: String, language: String = "gb") -> bool:
@@ -48,6 +49,7 @@ func open(directory: String, content_id: String, language: String = "gb") -> boo
 	radio_lines_cache.clear()
 	contract_names.clear()
 	sound_cache.clear()
+	player_profile_cache.clear()
 	strings = reader.language(read(language + ".lang"))
 	if strings.is_empty():
 		error = reader.error

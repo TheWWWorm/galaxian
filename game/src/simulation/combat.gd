@@ -163,6 +163,36 @@ static func advance(
 			state.cooldowns.erase(weapon)
 		else:
 			state.cooldowns[weapon] = remaining
+	# Cooldowns still had to tick. Nothing below concerns an empty sky, and a
+	# field's targets are not worth preparing for no projectiles at all.
+	if state.projectiles.is_empty():
+		return hits
+	# A target's identity, side and swept volume are the same for every
+	# projectile tested against it, and an asteroid field supplies eighty of them.
+	# Reading them once per advance keeps the sweep itself in the inner loop.
+	var count := targets.size()
+	var ids := PackedInt32Array()
+	var teams := PackedStringArray()
+	var centers := PackedVector3Array()
+	var origins := PackedVector3Array()
+	var extents := PackedVector3Array()
+	ids.resize(count)
+	teams.resize(count)
+	centers.resize(count)
+	origins.resize(count)
+	extents.resize(count)
+	for index in count:
+		var target: Dictionary = targets[index]
+		var id := int(target.id)
+		ids[index] = id
+		teams[index] = target.get("team", "ally" if id == -1 else "enemy")
+		centers[index] = vector(target.position)
+		origins[index] = vector(target.get("previous", target.position))
+		extents[index] = (
+			vector(target.extent)
+			if target.has("extent")
+			else Vector3.ONE * float(target.radius)
+		)
 	var survivors: Array = []
 	for shot in state.projectiles:
 		var dt := minf(seconds, float(shot.remaining))
@@ -171,35 +201,31 @@ static func advance(
 		var nearest := 2.0
 		var target_id := -2
 		var definition: Dictionary = profile(int(shot.weapon), library, enemies)
-		for target in targets:
+		# The shooter's own side does not vary across the targets either.
+		var shooter_team := team(int(shot.weapon), library, enemies)
+		var directed: bool = definition.has("target_ids")
+		var fraction_of := dt / seconds
+		for index in count:
 			# Directed fire restricts characters, not level geometry. The source
 			# gun checks its asteroid field after character collision as usual.
-			var target_team: String = target.get("team", "ally" if int(target.id) == -1 else "enemy")
-			if definition.has("target_ids") and target_team != "neutral":
-				if not definition.target_ids.has(int(target.id)):
+			var target_team := teams[index]
+			if directed and target_team != "neutral":
+				if not definition.target_ids.has(ids[index]):
 					continue
-			elif (
-				team(int(shot.weapon), library, enemies)
-				== target_team
-			):
+			elif shooter_team == target_team:
 				continue
 			# A moving target is swept in relative coordinates over the same
 			# interval, so crossing a projectile between frames still counts.
-			var center := vector(target.position)
-			var previous := vector(target.get("previous", target.position))
+			var previous := origins[index]
 			var fraction := box_intersection(
 				start - previous,
-				end - previous.lerp(center, dt / seconds),
+				end - previous.lerp(centers[index], fraction_of),
 				Vector3.ZERO,
-				(
-					vector(target.extent)
-					if target.has("extent")
-					else Vector3.ONE * float(target.radius)
-				)
+				extents[index]
 			)
 			if fraction >= 0 and fraction < nearest:
 				nearest = fraction
-				target_id = int(target.id)
+				target_id = ids[index]
 		if target_id != -2:
 			hits.append(
 				{
