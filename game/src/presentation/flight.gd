@@ -263,6 +263,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if (
 		event is InputEventMouseMotion and mouse_steering_enabled()
 		and event.device != InputEvent.DEVICE_ID_EMULATION
+		and not (motion_steering_enabled() and auto_pilot)
 	):
 		var movement := Vector2(-event.relative.x, -event.relative.y * (-1 if settings.invert else 1)) * float(settings.sensitivity)
 		if original_controls():
@@ -313,9 +314,14 @@ func original_controls() -> bool:
 	return settings.get("original_flight_controls", false) == true
 
 
+func motion_steering_enabled() -> bool:
+	return settings.get("motion_steering", false) == true
+
+
 func apply_control_settings(options: Dictionary) -> void:
 	var previous := original_controls()
 	settings.merge(options, true)
+	if motion_steering_enabled(): controls.touch_look = Vector2.ZERO
 	if not settings.get("touch", false): reset_touch_camera()
 	if previous != original_controls():
 		mouse_motion = Vector2.ZERO
@@ -396,7 +402,9 @@ func reset_touch_camera() -> void:
 
 
 func cancel_touch_navigation() -> void:
-	auto_pilot = false
+	# Tilt mode keeps navigation latched until its toggle is pressed. Deliberate
+	# touch actions still leave accelerated time, without abandoning the course.
+	if not motion_steering_enabled(): auto_pilot = false
 	time_factor = 1
 
 
@@ -563,20 +571,22 @@ func step(dt: float) -> void:
 	)
 	var frozen: bool = directions.frozen
 	if not directions.locked and not frozen:
+		var motion_mode := motion_steering_enabled()
+		if motion_mode: controls.touch_look = Vector2.ZERO
 		var pad := controls.snapshot()
 		if (
 			controls.touch_look.length_squared() > .0001 or absf(controls.touch_throttle) > .01
 			or controls.touch_fire or controls.touch_autofire or controls.touch_missiles or controls.touch_boost
 		):
 			cancel_touch_navigation()
-		if settings.get("motion_steering", false) and motion_sensor != null:
+		if motion_mode and motion_sensor != null:
 			var motion_look: Vector2 = motion_sensor.look(dt, float(settings.get("motion_sensitivity", .5)))
-			pad.look += motion_look
-			# The sensor already applies its calibration deadzone. Use the same
-			# remaining-input threshold as manual steering below, so resting tilt
-			# never interrupts travel and intentional phone steering returns to 1x.
-			if settings.get("touch", false) and absf(motion_look.x) + absf(motion_look.y) > .01:
-				cancel_touch_navigation()
+			# Keep filtering the live sensor, but let navigation exclusively steer
+			# while engaged. Phone movement must not unlock it or cancel speedup.
+			if not auto_pilot:
+				pad.look += motion_look
+				if settings.get("touch", false) and absf(motion_look.x) + absf(motion_look.y) > .01:
+					cancel_touch_navigation()
 		var up := (
 			float(Input.is_physical_key_pressed(KEY_W))
 			- float(Input.is_physical_key_pressed(KEY_S))
@@ -602,9 +612,10 @@ func step(dt: float) -> void:
 		yaw += pointer.x
 		pitch += pointer.y
 		throttle = clampf(throttle + up * dt * .55, 0, 1)
-		if absf(strafe) + absf(up) + absf(yaw) + absf(pitch) > .01:
+		if not motion_mode and absf(strafe) + absf(up) + absf(yaw) + absf(pitch) > .01:
 			auto_pilot = false
 		if auto_pilot:
+			if motion_mode: strafe = 0.0
 			session.motion.turn = [0.0, 0.0]
 			update_player_bank()
 			var direction: Vector3 = navigation_target() - ship.position

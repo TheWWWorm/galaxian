@@ -19,6 +19,11 @@ class TestMain extends "res://src/main.gd":
 	func refresh_display() -> void: super._process(0)
 
 
+class TestMotion extends "res://src/input/motion_steering.gd":
+	var gravity := Vector3(0, -9.8, 0)
+	func reading() -> Vector3: return gravity
+
+
 func _initialize() -> void:
 	call_deferred("run")
 
@@ -68,6 +73,7 @@ func run() -> void:
 	await check_floating_pad(app)
 	await check_transparency(app)
 	await check_navigation(app)
+	await check_motion_navigation(app)
 	await check_cancellation(app)
 	await check_layouts(app)
 	await check_radio(app)
@@ -519,6 +525,120 @@ func check_navigation(app) -> void:
 	check(not flight.auto_pilot and flight.time_factor == 1, "Manual steering cancels navigation and accelerated time")
 	await touch(stick, 0, false)
 	flight.controls.clear()
+
+
+func check_motion_navigation(app) -> void:
+	var hud = app.hud
+	var flight = app.flight
+	var sensor := TestMotion.new()
+	var previous_sensor = flight.motion_sensor
+	var previous_original: bool = flight.original_controls()
+	flight.motion_sensor = sensor
+	check(sensor.calibrate(), "Calibrate the simulated phone sensor")
+	var home: Vector2 = hud.stick_center * hud.factor
+	var nearby := floating_point(hud)
+	await touch(nearby, 0, true)
+	await drag(nearby + Vector2(20, 0) * hud.factor, 0)
+	check(hud.floating_stick and flight.controls.touch_look.x > 0, "Motion-mode switch starts with an owned floating pad")
+	app.settings.motion_steering = true
+	flight.apply_control_settings({"motion_steering": true})
+	await settle(app)
+	check(not hud.steering_layer.visible and hud.stick_finger == -1 and not hud.floating_stick and flight.controls.touch_look == Vector2.ZERO, "Enabling motion hides and releases the joystick, including its floating owner")
+	await drag(nearby + Vector2(50, 0) * hud.factor, 0)
+	check(flight.controls.touch_look == Vector2.ZERO and hud.camera_finger == -1, "Old pad contact cannot steer or turn into a camera drag after a mode switch")
+	await touch(nearby, 0, false)
+	check(hud.buttons.fire.is_visible_in_tree() and hud.buttons.boost.is_visible_in_tree() and hud.throttle_control.is_visible_in_tree() and hud.extra_buttons.AUTOPILOT.is_visible_in_tree(), "Motion mode keeps flight actions and navigation available")
+	for point in [home, nearby]:
+		await touch(point, 1, true)
+		await drag(point + Vector2(30, -10) * hud.factor, 1)
+		check(hud.stick_finger == -1 and flight.controls.touch_look == Vector2.ZERO and hud.camera_finger == 1, "Former fixed and floating pad areas become open-view camera space")
+		await touch(point, 1, false)
+	await mouse_button(home, true)
+	await mouse_drag(home + Vector2(20, 0) * hud.factor)
+	check(hud.stick_finger == -1 and flight.controls.touch_look == Vector2.ZERO and hud.camera_finger == -2, "Mouse cannot reactivate the hidden motion-mode joystick")
+	await mouse_button(home, false)
+	await capture(app, "phone-motion-manual")
+	for original in [false, true]:
+		flight.apply_control_settings({"original_flight_controls": original})
+		flight.ship.position = flight.station.position + Vector3(0, 0, flight.dock_radius + 5000)
+		flight.ship.basis = Basis.IDENTITY
+		flight.auto_pilot = false
+		flight.recent_damage = 0
+		flight.controls.clear()
+		flight.session.motion.turn = [0.0, 0.0]
+		sensor.gravity = Vector3(5, -6, -5)
+		await tap(hud.extra_buttons.AUTOPILOT)
+		await settle(app)
+		await tap(hud.extra_buttons.TIME)
+		check(flight.auto_pilot and flight.time_factor == 2, "Motion autopilot engages and accelerates while the phone is tilted")
+		var heading: Basis = flight.ship.basis
+		var web_input: bool = flight.web_mouse_input
+		var mouse_enabled: bool = flight.mouse_flight_enabled
+		flight.settings.touch = false
+		flight.web_mouse_input = true
+		flight.mouse_flight_enabled = true
+		var pointer := InputEventMouseMotion.new()
+		pointer.relative = Vector2(80, 20)
+		flight._unhandled_input(pointer)
+		check(flight.auto_pilot and flight.ship.basis.is_equal_approx(heading) and flight.mouse_motion == Vector2.ZERO, "Desktop or browser pointer movement also respects the motion-mode autopilot lock")
+		flight.settings.touch = true
+		flight.web_mouse_input = web_input
+		flight.mouse_flight_enabled = mouse_enabled
+		for gravity in [Vector3(5, -6, -5), Vector3(-5, -6, 5), Vector3(0, -9.8, 0), Vector3.ZERO]:
+			sensor.gravity = gravity
+			for frame in 6: flight._physics_process(.016)
+			check(flight.auto_pilot and flight.time_factor == 2 and flight.ship.basis.is_equal_approx(heading), "Large tilts, neutral and missing readings leave autopilot course and safe speedup intact")
+		flight.controls.touch_look = Vector2.ONE
+		flight._physics_process(.016)
+		check(flight.auto_pilot and flight.time_factor == 2 and flight.controls.touch_look == Vector2.ZERO, "Stale touch steering cannot cancel motion autopilot before the HUD updates")
+		sensor.gravity = Vector3(5, -6, -5)
+		await tap(hud.extra_buttons.AUTOPILOT)
+		check(not flight.auto_pilot and flight.time_factor == 1, "Second navigation tap explicitly unlocks motion steering")
+		for frame in 12: flight._physics_process(.016)
+		check(not flight.ship.basis.is_equal_approx(heading), "Current phone tilt resumes actual ship steering after unlocking in both flight models")
+		await tap(hud.extra_buttons.AUTOPILOT)
+		flight._physics_process(.016)
+		check(flight.auto_pilot, "Autopilot can be reengaged while the phone is still tilted")
+		flight.controls.clear()
+	flight.ship.position = flight.station.position + Vector3(0, 0, flight.dock_radius + 5000)
+	flight.time_factor = 4
+	flight.recent_damage = 1
+	flight._physics_process(.016)
+	check(flight.auto_pilot and flight.time_factor == 1, "Danger still reduces simulation speed while motion autopilot holds course")
+	flight.recent_damage = 0
+	var track := throttle_track(hud)
+	flight.time_factor = 2
+	await touch(track.get_center(), 2, true)
+	flight._physics_process(.016)
+	check(flight.auto_pilot and flight.time_factor == 1, "Motion-mode throttle interaction returns to normal time without unlocking navigation")
+	await touch(track.get_center(), 2, false)
+	for action in ["fire", "missiles", "boost"]:
+		flight.time_factor = 2
+		var control: Control = hud.buttons[action]
+		var point := control.get_global_rect().get_center()
+		await touch(point, 3, true)
+		flight._physics_process(.016)
+		check(flight.auto_pilot and flight.time_factor == 1, "Motion-mode " + action + " keeps autopilot engaged at normal time")
+		await touch(point, 3, false)
+	flight.controls.clear()
+	flight.session.motion.boost_remaining = 0
+	flight.ship.position = flight.station.position + Vector3(0, 0, flight.dock_radius - 20)
+	flight._physics_process(.016)
+	check(not flight.auto_pilot and flight.time_factor == 1 and flight.throttle == 0, "Motion autopilot still stops normally on station arrival")
+	flight.ship.position = flight.station.position + Vector3(0, 0, flight.dock_radius + 5000)
+	await tap(hud.extra_buttons.AUTOPILOT)
+	await capture(app, "phone-motion-autopilot")
+	app.settings.motion_steering = false
+	flight.apply_control_settings({"motion_steering": false, "original_flight_controls": previous_original})
+	flight.motion_sensor = previous_sensor
+	await settle(app)
+	check(hud.steering_layer.visible and hud.stick_finger == -1 and hud.stick_offset == Vector2.ZERO, "Disabling motion restores a neutral joystick at its home position")
+	await touch(home + Vector2(15, 0) * hud.factor, 4, true)
+	flight._physics_process(.016)
+	check(not flight.auto_pilot and flight.time_factor == 1 and flight.controls.touch_look.x > 0, "Restored joystick steers and retains the ordinary autopilot override")
+	await touch(home, 4, false)
+	flight.controls.clear()
+	flight.reset_touch_camera()
 
 
 func check_cancellation(app) -> void:

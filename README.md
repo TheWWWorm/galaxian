@@ -114,7 +114,7 @@ under your thumb for that gesture; releasing returns it to its usual position.
 Drag the remaining open view to look around; release to return the camera forward. The right-edge throttle keeps its setting
 after release, and Boost triggers a temporary burst. Navigation sits above the
 stick; Speedup appears beside it during safe autopilot, and Dock appears near an
-eligible station. Touch steering, throttle, Boost and firing cancel autopilot
+eligible station. In joystick mode, touch steering, throttle, Boost and firing cancel autopilot
 and return simulation speed to 1×.
 Hold **Fire** to shoot, or **double-tap Fire** to enable autofire. **AUTO** appears
 on the fire button while enabled; tap Fire once to stop. Pausing clears autofire.
@@ -123,7 +123,11 @@ controls are enabled. Android Back pauses/resumes flight or returns from a menu.
 On supported phones, **Options → Controls → Steering settings → Motion steering** enables calibrated
 tilt steering, with sensitivity and a **Center motion controls** action. Hold your
 phone comfortably before enabling or centering it. Browsers may ask for sensor
-permission. This is a remake feature; physical-device tuning is still unverified.
+permission. Motion steering hides and disables the joystick. Autopilot stays
+engaged while you move the phone; tap Navigation again to resume manual steering.
+Throttle, Boost and firing return time to normal while keeping autopilot engaged
+in this mode. Arrival stops and mission control still apply.
+This is a remake feature; physical-device tuning is still unverified.
 Full key remapping is not implemented.
 
 **Action freeze** pauses the scene for screenshots. Drag to orbit, right-drag to pan

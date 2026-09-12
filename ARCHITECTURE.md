@@ -1315,6 +1315,13 @@ DeviceMotion inputs are supported, both normalized to screen-space gravity point
 down at rest, so a right-edge-down roll steers right like a stick pushed right.
 Absolute tilt avoids integrated gyro drift; this is not a reconstruction of GOF2
 sensor tuning. Only the horizontal direction has been corrected from device reports.
+Selecting motion steering hides the fixed and floating touch pad and releases
+any current pad owner. Flight also clears stale pad input before taking its input
+snapshot. Sensor filtering continues during autopilot, but contributes steering
+only in manual flight. In motion mode, input cannot disengage autopilot; its
+toggle, normal arrival and mission transitions still can. Deliberate touch
+actions return simulation time to normal without clearing navigation. Sensor
+movement alone leaves safe time acceleration intact.
 
 Ship catalogue information and exchange confirmation list supplied mount counts
 for each weapon category, including unsupported categories with zero slots.

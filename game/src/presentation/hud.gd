@@ -105,6 +105,8 @@ func _process(_delta: float) -> void:
 	var cinematic: bool = flight.cinematic_locked()
 	if flight.paused or cinematic or not touch_enabled:
 		reset_touch()
+	elif not stick_enabled():
+		release_stick()
 	# Supplied MGame::OnRender2D skips the ego bars, radar and Hud draw entirely
 	# while its level script owns the scene, and ignores touch for that time.
 	if cinematic != cinematic_hidden:
@@ -467,7 +469,7 @@ func _draw() -> void:
 				int(library.content.flight_ui.artwork.colors["hull" if index == 0 else "shield"])
 			)
 		)
-	steering_layer.visible = touch_enabled
+	steering_layer.visible = stick_enabled()
 	plaque_layer.visible = touch_enabled
 	weapon_caption.visible = touch_enabled and flight.session.weapon_id >= 0 and survival_rules.is_empty()
 	if touch_enabled:
@@ -500,6 +502,10 @@ func bitmap(value: String, point: Vector2, width: float = INF) -> void:
 
 func accepts_touch() -> bool:
 	return flight != null and not flight.paused and is_visible_in_tree() and touch_enabled
+
+
+func stick_enabled() -> bool:
+	return touch_enabled and flight != null and not flight.motion_steering_enabled()
 
 
 func throttle_contains(point: Vector2) -> bool:
@@ -541,7 +547,7 @@ func _input(event: InputEvent) -> void:
 				throttle_finger = -2
 				throttle_control.set_throttle_at(event.position)
 			get_viewport().set_input_as_handled()
-		elif Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(event.position):
+		elif stick_enabled() and Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(event.position):
 			if stick_finger == -1:
 				begin_stick(event.position, -2, false)
 			get_viewport().set_input_as_handled()
@@ -601,7 +607,7 @@ func _input(event: InputEvent) -> void:
 				throttle_control.set_throttle_at(event.position)
 			get_viewport().set_input_as_handled()
 			return
-		if Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(event.position):
+		if stick_enabled() and Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(event.position):
 			if stick_finger == -1:
 				begin_stick(event.position, event.index, false)
 			get_viewport().set_input_as_handled()
@@ -619,12 +625,14 @@ func _input(event: InputEvent) -> void:
 
 
 func floating_stick_region() -> Rect2:
+	if not stick_enabled(): return Rect2()
 	var home := Rect2(stick_origin * factor, art.stick_frame.get_size() * factor)
 	var nearby := home.grow_individual(24 * factor, 60 * factor, 100 * factor, 24 * factor)
 	return nearby.intersection(Rect2(Vector2(0, size.y * .42), Vector2(size.x * .4, size.y * .58)))
 
 
 func begin_stick(point: Vector2, finger: int, relocate: bool) -> void:
+	if not stick_enabled(): return
 	stick_finger = finger
 	floating_stick = relocate
 	stick_anchor = point / factor if relocate else stick_center
@@ -668,6 +676,9 @@ func paint_weapon_caption() -> void:
 
 
 func steer_touch(point: Vector2) -> void:
+	if not stick_enabled():
+		release_stick()
+		return
 	stick_vector = ((point / factor - stick_anchor) / float(flight.library.content.flight_ui.artwork.layout.stick_radius)).limit_length()
 	if stick_vector.length() < .08:
 		stick_vector = Vector2.ZERO
