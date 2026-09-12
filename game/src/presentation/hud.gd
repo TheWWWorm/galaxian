@@ -2,11 +2,15 @@ extends Control
 ## Original flight artwork with native projection and input ownership.
 const SurvivalFeedback = preload("res://src/presentation/survival_feedback.gd")
 const SurvivalResult = preload("res://src/presentation/survival_result.gd")
+const FlightButton = preload("res://src/presentation/touch_flight_button.gd")
+const HudSkin = preload("res://src/presentation/flight_hud_skin.gd")
+const Throttle = preload("res://src/presentation/touch_throttle.gd")
 var survival_rules := {}
 var survival_score_image: Texture2D
 var flight
 var touch_enabled := false
 var art := {}
+var symbols := {}
 var buttons := {}
 var extra_buttons := {}
 var factor := 1.0
@@ -14,7 +18,18 @@ var stick_origin := Vector2.ZERO
 var stick_center := Vector2.ZERO
 var stick_finger := -1
 var stick_vector := Vector2.ZERO
+var stick_offset := Vector2.ZERO
+var stick_anchor := Vector2.ZERO
+var floating_stick := false
+var steering_layer: CanvasGroup
+var plaque_layer: CanvasGroup
+var weapon_caption := Node2D.new()
 var action_fingers := {}
+var throttle_control := Throttle.new()
+var throttle_finger := -1
+var camera_finger := -1
+var camera_last := Vector2.ZERO
+var docking_available := false
 var cinematic_hidden := false
 var reticle := TextureRect.new()
 var autofire_label := Label.new()
@@ -95,6 +110,7 @@ func _process(_delta: float) -> void:
 	if cinematic != cinematic_hidden:
 		cinematic_hidden = cinematic
 		visible = not cinematic
+	refresh_navigation_controls()
 	if cinematic:
 		return
 	if not survival_rules.is_empty():
@@ -109,7 +125,7 @@ func _process(_delta: float) -> void:
 		buttons.missiles.visible = touch_enabled
 	var tutorial: Dictionary = flight.session.tutorial_cue()
 	for action in ["boost", "missiles"]:
-		buttons[action].self_modulate.a = 1.0 if tutorial.get("action") == action and tutorial.get("lit", false) else flight.button_opacity(action)
+		buttons[action].availability = 1.0 if tutorial.get("action") == action and tutorial.get("lit", false) else flight.button_opacity(action)
 	autofire_label.visible = touch_enabled and flight.controls.touch_autofire
 	queue_redraw()
 	var active: bool = not flight.paused and not flight.outro_active and not flight.session.active_job.get("ready", false)
@@ -264,16 +280,20 @@ func place(marker: Dictionary, point: Vector3, kind: String, near: bool) -> void
 func setup_artwork() -> void:
 	for key in flight.library.content.flight_ui.artwork.images:
 		art[key] = flight.library.ui_image(flight.library.content.flight_ui.artwork.images[key])
+	steering_layer = HudSkin.translucent_layer(self, paint_steering)
+	plaque_layer = HudSkin.translucent_layer(self, paint_plaque)
+	weapon_caption.draw.connect(paint_weapon_caption)
+	add_child(weapon_caption)
+	for key in ["hull", "shield"]:
+		symbols[key] = HudSkin.symbol(art[key])
 	for action in ["boost", "fire", "weapon", "missiles", "pause"]:
-		var control := TextureButton.new()
-		control.ignore_texture_size = true
-		control.stretch_mode = TextureButton.STRETCH_SCALE
+		var control := FlightButton.new()
+		control.kind = action
 		control.tooltip_text = "Hold to fire. Double-tap for autofire; tap again to stop." if action == "fire" else action.capitalize()
 		control.visible = touch_enabled
 		if action == "fire":
 			# The source overlays the luminous disk beneath the permanent fire frame.
 			control.texture_normal = art.fire_overlay
-			control.self_modulate.a = 0
 		else:
 			control.texture_normal = flight.library.ui_image(
 				flight.library.content.flight_ui.buttons[action].normal
@@ -283,6 +303,22 @@ func setup_artwork() -> void:
 			)
 		add_child(control)
 		buttons[action] = control
+	var actions := ["TIME"] if flight.session.slot == "survival" else ["AUTOPILOT", "TIME", "DOCK"]
+	for action in actions:
+		var control := FlightButton.new()
+		control.kind = action
+		control.tooltip_text = {"AUTOPILOT": "Autopilot", "TIME": "Simulation speed", "DOCK": "Dock"}[action]
+		control.hide()
+		add_child(control)
+		extra_buttons[action] = control
+		match action:
+			"AUTOPILOT": control.pressed.connect(flight.toggle_autopilot)
+			"TIME": control.pressed.connect(func():
+				if flight.can_accelerate_time(): flight.cycle_time())
+			"DOCK": control.pressed.connect(flight.try_dock)
+	throttle_control.flight = flight
+	throttle_control.hide()
+	add_child(throttle_control)
 	autofire_label.text = "AUTO"
 	autofire_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	autofire_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -296,11 +332,13 @@ func setup_artwork() -> void:
 	add_child(autofire_label)
 	resized.connect(layout_artwork)
 	layout_artwork()
+	refresh_navigation_controls()
 
 
 func layout_artwork() -> void:
 	if art.is_empty() or size.x <= 0 or size.y <= 0:
 		return
+	release_stick()
 	factor = preload("res://src/presentation/bitmap_font.gd").composition_scale(size)
 	var extent := size / factor
 	var layout: Dictionary = flight.library.content.flight_ui.artwork.layout
@@ -312,6 +350,7 @@ func layout_artwork() -> void:
 	# Account for that offset and the half-texel center of the ring's pixels.
 	var pivot: float = (art.stick_frame.get_width() - art.stick_normal.get_width()) * 2.0
 	stick_center = stick_origin + Vector2(pivot + .5, pivot - 3.5)
+	stick_anchor = stick_center
 	var centers := {
 		"pause": Vector2(extent.x - layout.pause_right, layout.pause_top),
 		"fire": Vector2(extent.x - layout.fire_right, extent.y - layout.fire_bottom),
@@ -321,16 +360,76 @@ func layout_artwork() -> void:
 		"missiles": Vector2(extent.x - layout.missiles_right, extent.y - layout.missiles_bottom)
 	}
 	for action in buttons:
-		var control: TextureButton = buttons[action]
+		var control = buttons[action]
+		control.factor = factor
 		var dimensions: Vector2 = control.texture_normal.get_size()
 		control.position = (centers[action] - dimensions * .5) * factor
 		control.size = dimensions * factor
 		# Keep the full modern hit rectangle inside safe viewport edges.
 		control.position = control.position.clamp(Vector2.ZERO, size - control.size)
+	# Preserve the imported action composition; new controls occupy fixed spaces.
+	var navigation := Vector2(stick_origin.x, stick_origin.y - 44)
+	var extra_origins := {
+		"AUTOPILOT": navigation,
+		"TIME": navigation + Vector2(46, 0),
+		"DOCK": centers.missiles + Vector2(-44, -80)
+	}
+	for action in extra_buttons:
+		var control = extra_buttons[action]
+		control.factor = factor
+		control.size = Vector2(44, 44) * factor
+		control.position = (extra_origins[action] * factor).clamp(Vector2.ZERO, size - control.size)
+		control.queue_redraw()
+	throttle_control.layout(factor)
+	var margin: float = flight.library.content.flight_ui.radar.margin
+	# Keep the shortened height; the revised wider track has a deliberate gap
+	# from the frame. Its generous touch area still extends inward.
+	throttle_control.position = Vector2(
+		size.x - (margin + 15) * factor - throttle_control.size.x,
+		buttons.pause.position.y + buttons.pause.size.y + 10 * factor
+	)
 	autofire_label.position = buttons.fire.position
 	autofire_label.size = buttons.fire.size
 	autofire_label.add_theme_font_size_override("font_size", maxi(8, roundi(12 * factor)))
 	queue_redraw()
+
+
+func refresh_navigation_controls() -> void:
+	if flight == null or buttons.is_empty():
+		return
+	var shown: bool = touch_enabled and not flight.cinematic_locked() and not flight.paused
+	for control: FlightButton in buttons.values():
+		control.visible = touch_enabled
+	var extras: bool = shown and flight.settings.get("extra_flight_buttons", true)
+	throttle_control.visible = extras
+	throttle_control.refresh()
+	docking_available = false
+	for action in extra_buttons:
+		var control = extra_buttons[action]
+		var available: bool = extras
+		if action == "TIME": available = available and flight.can_accelerate_time()
+		elif action == "DOCK": available = available and flight.can_dock()
+		if action == "DOCK": docking_available = available
+		control.visible = available
+		control.active = action == "AUTOPILOT" and flight.auto_pilot
+		control.multiplier = flight.time_factor
+		control.queue_redraw()
+		if not available:
+			for finger in action_fingers.keys():
+				if action_fingers[finger] == action:
+					action_fingers.erase(finger)
+					control.set_touch_pressed(false)
+					control.button_up.emit()
+	if not extras and throttle_finger != -1:
+		throttle_finger = -1
+
+
+func status_text() -> String:
+	if docking_available:
+		return "Docking available"
+	if flight.auto_pilot:
+		return "AUTOPILOT · %dx" % flight.time_factor
+	return flight.objective()
 
 
 func _draw() -> void:
@@ -341,15 +440,19 @@ func _draw() -> void:
 	var extent := size / factor
 	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE * factor)
 	flight.damage_feedback.draw(self, extent)
-	draw_radar_frame(extent)
+	if touch_enabled:
+		HudSkin.perimeter(self, extent, float(flight.library.content.flight_ui.radar.margin))
+	else:
+		draw_radar_frame(extent)
 	var x: float = art.shield.get_width() + layout.bar_left_offset
 	var inset: float = layout.bar_inset_twice / 2.0
 	for index in 2:
 		var y: float = (
 			layout.hull_top if index == 0 else art.bar.get_height() + layout.shield_top_offset
 		)
-		draw_texture(art.bar, Vector2(x, y))
-		draw_texture(art.hull if index == 0 else art.shield, Vector2(layout.icon_left, y))
+		HudSkin.panel(self, Rect2(Vector2(x, y), art.bar.get_size()), 2, Color("14413c66"), Color("91aca966"))
+		var key := "hull" if index == 0 else "shield"
+		draw_texture_rect(symbols[key], Rect2(Vector2(layout.icon_left, y), art[key].get_size()), false)
 		var maximum: float = (
 			flight.session.max_hull() if index == 0 else flight.session.max_shield()
 		)
@@ -364,28 +467,15 @@ func _draw() -> void:
 				int(library.content.flight_ui.artwork.colors["hull" if index == 0 else "shield"])
 			)
 		)
+	steering_layer.visible = touch_enabled
+	plaque_layer.visible = touch_enabled
+	weapon_caption.visible = touch_enabled and flight.session.weapon_id >= 0 and survival_rules.is_empty()
 	if touch_enabled:
-		draw_texture(art.stick_frame, stick_origin)
-		var knob: Texture2D = art.stick_pressed if stick_finger >= 0 else art.stick_normal
-		draw_texture(knob, stick_center + stick_vector * layout.stick_radius - knob.get_size() * .5)
-		var fire: TextureButton = buttons.fire
-		var fire_center := (fire.position + fire.size * .5) / factor
-		draw_texture(
-			art.fire_frame,
-			Vector2(
-				extent.x - art.fire_frame.get_width() - layout.fire_frame_right,
-				fire_center.y - art.fire_frame.get_height() * .5
-			)
-		)
-	if flight.session.weapon_id >= 0 and survival_rules.is_empty():
-		bitmap(
-			flight.library.item_name(flight.session.weapon_id),
-			Vector2(
-				extent.x - layout.weapon_label_right,
-				extent.y - layout.weapon_label_bottom - library.radio_glyphs().values()[0].size.y
-			),
-			90
-		)
+		HudSkin.redraw_layer(steering_layer, .88 if stick_finger != -1 else HudSkin.IDLE_OPACITY)
+		HudSkin.redraw_layer(plaque_layer)
+		weapon_caption.queue_redraw()
+	elif flight.session.weapon_id >= 0 and survival_rules.is_empty():
+		bitmap(flight.library.item_name(flight.session.weapon_id), Vector2(extent.x - layout.weapon_label_right, extent.y - layout.weapon_label_bottom - library.radio_glyphs().values()[0].size.y), 90)
 	if not survival_rules.is_empty():
 		draw_survival(extent)
 	var definition: Dictionary = flight.session.mission_definition()
@@ -408,95 +498,236 @@ func _draw() -> void:
 func bitmap(value: String, point: Vector2, width: float = INF) -> void:
 	preload("res://src/presentation/bitmap_font.gd").draw_text(self, flight.library, value, point, width)
 
+func accepts_touch() -> bool:
+	return flight != null and not flight.paused and is_visible_in_tree() and touch_enabled
+
+
+func throttle_contains(point: Vector2) -> bool:
+	return throttle_control.is_visible_in_tree() and throttle_control.touch_rect.has_point(
+		throttle_control.get_global_transform().affine_inverse() * point
+	)
+
+
 func _input(event: InputEvent) -> void:
-	if flight == null or flight.paused or not visible or not touch_enabled:
+	if not accepts_touch():
 		return
 	var actions: Dictionary = buttons.duplicate()
 	actions.merge(extra_buttons)
-	# Touch actions already have independent finger ownership below. Suppress the
-	# accompanying emulated mouse click so one tap cannot trigger an action twice.
+	# Suppress duplicate emulated clicks even when an owned finger leaves its
+	# starting rectangle. Each real finger keeps its original action until up.
 	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
-		for control: BaseButton in actions.values():
+		if throttle_finger >= 0 or camera_finger >= 0 or stick_finger >= 0 or not action_fingers.is_empty() or throttle_contains(event.position):
+			get_viewport().set_input_as_handled()
+			return
+		for control: FlightButton in actions.values():
 			if control.is_visible_in_tree() and control.get_global_rect().has_point(event.position):
 				get_viewport().set_input_as_handled()
 				return
-	if event is InputEventScreenTouch:
-		if not event.pressed and action_fingers.has(event.index):
-			var action: String = action_fingers[event.index]
-			var control: BaseButton = actions[action]
-			action_fingers.erase(event.index)
-			control.set_pressed_no_signal(false)
-			var completed: bool = not event.canceled and control.is_visible_in_tree() and control.get_global_rect().has_point(event.position)
-			if action == "fire" and not completed:
-				flight.controls.clear_touch_fire()
-			control.button_up.emit()
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if not event.pressed:
+			if throttle_finger == -2:
+				throttle_finger = -1
+				get_viewport().set_input_as_handled()
+			elif camera_finger == -2:
+				camera_finger = -1
+				flight.end_touch_camera()
+				get_viewport().set_input_as_handled()
+			elif stick_finger == -2:
+				release_stick()
+				get_viewport().set_input_as_handled()
+		elif throttle_contains(event.position):
+			if throttle_finger == -1:
+				throttle_finger = -2
+				throttle_control.set_throttle_at(event.position)
 			get_viewport().set_input_as_handled()
-			if completed:
-				control.pressed.emit()
+		elif Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(event.position):
+			if stick_finger == -1:
+				begin_stick(event.position, -2, false)
+			get_viewport().set_input_as_handled()
+		return
+	if event is InputEventMouseMotion:
+		if throttle_finger == -2:
+			throttle_control.set_throttle_at(event.position)
+			get_viewport().set_input_as_handled()
+		elif camera_finger == -2:
+			drag_camera(event.position)
+		elif stick_finger == -2:
+			steer_touch(event.position)
+		return
+	if event is InputEventScreenTouch:
+		if not event.pressed:
+			if action_fingers.has(event.index):
+				var action: String = action_fingers[event.index]
+				var control: FlightButton = actions[action]
+				action_fingers.erase(event.index)
+				control.set_touch_pressed(false)
+				var completed: bool = not event.canceled and control.is_visible_in_tree() and control.get_global_rect().has_point(event.position)
+				if action == "fire" and not completed:
+					flight.controls.clear_touch_fire()
+				control.button_up.emit()
+				get_viewport().set_input_as_handled()
+				if completed:
+					control.pressed.emit()
+				return
+			if event.index == throttle_finger:
+				throttle_finger = -1
+			elif event.index == camera_finger:
+				camera_finger = -1
+				if event.canceled: flight.reset_touch_camera()
+				else: flight.end_touch_camera()
+			elif event.index == stick_finger:
+				release_stick()
+			else:
+				return
+			get_viewport().set_input_as_handled()
 			return
-		if event.pressed:
-			for action in actions:
-				var control: BaseButton = actions[action]
-				if (
-					control.is_visible_in_tree()
-					and control.get_global_rect().has_point(event.position)
-				):
-					if not action_fingers.values().has(action):
-						action_fingers[event.index] = action
-						control.set_pressed_no_signal(true)
-						control.button_down.emit()
-					get_viewport().set_input_as_handled()
-					return
+		for action in actions:
+			var control: FlightButton = actions[action]
+			if control.is_visible_in_tree() and not control.disabled and control.get_global_rect().has_point(event.position):
+				if not action_fingers.values().has(action):
+					action_fingers[event.index] = action
+					if action in ["boost", "fire", "missiles"]:
+						flight.cancel_touch_navigation()
+					control.set_touch_pressed(true)
+					control.button_down.emit()
+				get_viewport().set_input_as_handled()
+				return
 		if flight.cinematic_locked():
 			return
-		if (
-			touch_enabled
-			and event.pressed
-			and stick_finger < 0
-			and Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(
-				event.position
-			)
-		):
-			stick_finger = event.index
-		elif not event.pressed and event.index == stick_finger:
-			stick_finger = -1
-			stick_vector = Vector2.ZERO
-			flight.controls.touch_look = Vector2.ZERO
+		if throttle_contains(event.position):
+			if throttle_finger == -1:
+				throttle_finger = event.index
+				throttle_control.set_throttle_at(event.position)
 			get_viewport().set_input_as_handled()
 			return
-		else:
+		if Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(event.position):
+			if stick_finger == -1:
+				begin_stick(event.position, event.index, false)
+			get_viewport().set_input_as_handled()
 			return
-	elif event is InputEventScreenDrag and action_fingers.has(event.index):
-		get_viewport().set_input_as_handled()
-		return
-	elif not event is InputEventScreenDrag or event.index != stick_finger:
-		return
-	stick_vector = (
-		(
-			(event.position / factor - stick_center)
-			/ float(flight.library.content.flight_ui.artwork.layout.stick_radius)
-		)
-		. limit_length()
-	)
+	elif event is InputEventScreenDrag:
+		if action_fingers.has(event.index):
+			get_viewport().set_input_as_handled()
+		elif event.index == throttle_finger:
+			throttle_control.set_throttle_at(event.position)
+			get_viewport().set_input_as_handled()
+		elif event.index == camera_finger:
+			drag_camera(event.position)
+		elif event.index == stick_finger:
+			steer_touch(event.position)
+
+
+func floating_stick_region() -> Rect2:
+	var home := Rect2(stick_origin * factor, art.stick_frame.get_size() * factor)
+	var nearby := home.grow_individual(24 * factor, 60 * factor, 100 * factor, 24 * factor)
+	return nearby.intersection(Rect2(Vector2(0, size.y * .42), Vector2(size.x * .4, size.y * .58)))
+
+
+func begin_stick(point: Vector2, finger: int, relocate: bool) -> void:
+	stick_finger = finger
+	floating_stick = relocate
+	stick_anchor = point / factor if relocate else stick_center
+	if relocate:
+		# Keep the full circular base on screen. The raw touch remains the neutral
+		# input origin, including when the visible center is inset at an edge.
+		var extent := size / factor
+		var center := stick_anchor.clamp(Vector2(53, 53), Vector2(extent.x * .5 - 48, extent.y - 53))
+		stick_offset = center - stick_center
+	else:
+		stick_offset = Vector2.ZERO
+	flight.cancel_touch_navigation()
+	steer_touch(point)
+
+
+func release_stick() -> void:
+	stick_finger = -1
+	stick_vector = Vector2.ZERO
+	stick_offset = Vector2.ZERO
+	stick_anchor = stick_center
+	floating_stick = false
+	if flight != null and is_instance_valid(flight):
+		flight.controls.touch_look = Vector2.ZERO
+	queue_redraw()
+
+
+func paint_steering(canvas: Node2D) -> void:
+	canvas.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE * factor)
+	HudSkin.steering(canvas, stick_origin + stick_offset, stick_center + stick_offset, stick_vector * flight.library.content.flight_ui.artwork.layout.stick_radius, stick_finger != -1, not floating_stick)
+
+
+func paint_plaque(canvas: Node2D) -> void:
+	canvas.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE * factor)
+	var fire = buttons.fire
+	HudSkin.weapon_plaque(canvas, size / factor, (fire.position + fire.size * .5) / factor)
+
+
+func paint_weapon_caption() -> void:
+	var center: Vector2 = (buttons.fire.position + buttons.fire.size * .5) / factor
+	HudSkin.text(weapon_caption, flight.library.item_name(flight.session.weapon_id), Vector2(size.x / factor - 114, center.y + 24.5), 13, factor, HudSkin.PALE, true, 90)
+
+
+func steer_touch(point: Vector2) -> void:
+	stick_vector = ((point / factor - stick_anchor) / float(flight.library.content.flight_ui.artwork.layout.stick_radius)).limit_length()
 	if stick_vector.length() < .08:
 		stick_vector = Vector2.ZERO
 	flight.controls.touch_look = stick_vector
 	get_viewport().set_input_as_handled()
 
 
+func drag_camera(point: Vector2) -> void:
+	flight.drag_touch_camera(point - camera_last)
+	camera_last = point
+	get_viewport().set_input_as_handled()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Give radio panels and other UI first refusal. Only a gesture that starts
+	# in the remaining open view can become a camera gesture.
+	if not accepts_touch() or flight.cinematic_locked():
+		return
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventScreenTouch and event.pressed:
+		if floating_stick_region().has_point(event.position):
+			if stick_finger == -1: begin_stick(event.position, event.index, true)
+			get_viewport().set_input_as_handled()
+			return
+		if camera_finger == -1:
+			camera_finger = event.index
+			camera_last = event.position
+			flight.begin_touch_camera()
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if floating_stick_region().has_point(event.position):
+			if stick_finger == -1: begin_stick(event.position, -2, true)
+			get_viewport().set_input_as_handled()
+			return
+		if camera_finger == -1:
+			camera_finger = -2
+			camera_last = event.position
+			flight.begin_touch_camera()
+		get_viewport().set_input_as_handled()
+
+
 func reset_touch() -> void:
-	stick_finger = -1
-	stick_vector = Vector2.ZERO
-	for control: BaseButton in buttons.values():
-		control.set_pressed_no_signal(false)
-	for control: BaseButton in extra_buttons.values():
-		control.set_pressed_no_signal(false)
+	release_stick()
+	throttle_finger = -1
+	camera_finger = -1
+	for control: FlightButton in buttons.values():
+		control.set_touch_pressed(false)
+	for control: FlightButton in extra_buttons.values():
+		control.set_touch_pressed(false)
 	action_fingers.clear()
+	if flight == null or not is_instance_valid(flight):
+		return
 	flight.controls.touch_look = Vector2.ZERO
 	flight.controls.clear_touch_fire()
 	flight.controls.touch_boost = false
 	flight.controls.touch_missiles = false
 	flight.controls.touch_throttle = 0.0
+	flight.reset_touch_camera()
 
 
 func draw_radar_frame(extent: Vector2) -> void:

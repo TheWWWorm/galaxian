@@ -147,6 +147,13 @@ static func name(library, entry: Dictionary) -> String:
 	)
 
 
+static func type_name(library, entry: Dictionary) -> String:
+	if entry.get("kind") != "equipment":
+		return ""
+	var item: Dictionary = library.equipment(int(entry.id))
+	return library.text(int(library.content.hangar_ui.labels.category_base) + int(item.category))
+
+
 static func description(library, entry: Dictionary) -> String:
 	if entry.is_empty() or entry.kind == "empty":
 		return "Select compatible equipment in Cargo to install it."
@@ -209,6 +216,9 @@ static func group(library, entry: Dictionary) -> int:
 static func information(library, pilot, entry: Dictionary) -> String:
 	var result := description(library,entry)
 	if entry.is_empty() or entry.kind == "empty": return result
+	var item_type := type_name(library, entry)
+	if not item_type.is_empty():
+		result = item_type + " · " + name(library, entry) + "\n\n" + result
 	var labels: Dictionary = library.content.hangar_ui.labels
 	var values: Array = []
 	if entry.kind == "ship":

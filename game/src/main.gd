@@ -109,10 +109,15 @@ func _init() -> void:
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
 	get_tree().quit_on_go_back = false
+	if OS.has_feature("touch_preview"):
+		preload("res://src/presentation/bitmap_font.gd").mobile_cache = 1
 	settings.touch = preload("res://src/presentation/bitmap_font.gd").is_mobile()
 	setup_world()
 	setup_ui()
 	load_settings()
+	if OS.has_feature("touch_preview"):
+		settings.touch = true
+		settings.extra_flight_buttons = true
 	motion_sensor.notice.connect(notify)
 	if settings.motion_steering: motion_sensor.enable()
 	DisplaySettings.apply_aspect(get_window(), str(settings.aspect_ratio))
@@ -356,6 +361,8 @@ func clear_page() -> void:
 		child.queue_free()
 	if hud != null and is_instance_valid(hud):
 		hud.set_process_input(false)
+		hud.set_process_unhandled_input(false)
+		hud.reset_touch()
 		# Stop its cinematic visibility tracking before the node is discarded.
 		hud.set_process(false)
 		hud.hide()
@@ -1329,35 +1336,7 @@ func show_flight_hud() -> void:
 	flight_stats = label("", 14)
 	flight_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	extra.add_child(flight_stats)
-	flight_stats.visible = settings.flight_overlays
-	var controls := HBoxContainer.new()
-	controls.visible = bool(settings.touch) and settings.extra_flight_buttons
-	controls.alignment = BoxContainer.ALIGNMENT_CENTER
-	extra.add_child(controls)
-	var actions := ["TIME"] if survival_active() else ["TIME", "AUTOPILOT", "DOCK"]
-	if settings.touch:
-		actions.push_front("−")
-		actions.append("+")
-	for action in actions:
-		var callback: Callable
-		if action in ["−", "+"]:
-			callback = change_touch_throttle.bind(-.25 if action == "−" else .25)
-		else:
-			callback = (
-				flight.cycle_time
-				if action == "TIME"
-				else (flight.toggle_autopilot if action == "AUTOPILOT" else flight.try_dock)
-			)
-		var control := button(action, callback, controls)
-		control.custom_minimum_size = Vector2(48 if action in ["−", "+"] else 70, 32)
-		control.alignment = HORIZONTAL_ALIGNMENT_CENTER
-		control.add_theme_font_size_override("font_size", 12)
-		control.tooltip_text = (
-			"Decrease speed"
-			if action == "−"
-			else ("Increase speed" if action == "+" else action.capitalize())
-		)
-		hud.extra_buttons[action] = control
+	flight_stats.visible = settings.flight_overlays and (not settings.touch or not settings.extra_flight_buttons)
 	dialogue_panel = Dialogue.new()
 	dialogue_panel.library = library
 	ui.add_child(dialogue_panel)
@@ -1373,23 +1352,16 @@ func show_flight_hud() -> void:
 
 func change_touch_throttle(amount: float) -> void:
 	if flight != null and not flight.paused and not flight.cinematic_locked():
-		flight.auto_pilot = false
-		flight.throttle += amount
+		flight.set_touch_throttle(flight.throttle + amount)
 
 
 func update_tutorial_controls() -> void:
 	var cue: Dictionary = session.tutorial_cue()
 	for action in flight_buttons:
-		var control: TextureButton = flight_buttons[action]
+		var control = flight_buttons[action]
 		var highlighted: bool = cue.get("action") == action and cue.get("lit", false)
-		if action == "fire":
-			control.self_modulate.a = (
-				1.0 if control.is_pressed() or flight.controls.touch_fire or flight.controls.touch_autofire or highlighted else 0.0
-			)
-		else:
-			control.texture_normal = library.ui_image(
-				library.content.flight_ui.buttons[action]["pressed" if highlighted else "normal"]
-			)
+		control.active = highlighted or (action == "fire" and (flight.controls.touch_fire or flight.controls.touch_autofire))
+		control.queue_redraw()
 
 
 func show_pause() -> void:
@@ -1798,7 +1770,7 @@ func apply_audio_settings() -> void:
 
 
 func settings_path() -> String:
-	return "user://settings.cfg"
+	return "user://touch-preview-settings.cfg" if OS.has_feature("touch_preview") else "user://settings.cfg"
 
 
 func save_settings() -> void:
@@ -1913,7 +1885,7 @@ func _process(delta: float) -> void:
 		if flight.paused and not paused:
 			show_pause()
 			return
-		flight_objective.text = flight.objective()
+		flight_objective.text = hud.status_text()
 		flight_stats.text = (
 			"%d m/s    ×%d    %s"
 			% [flight.speed, flight.time_factor, "Autopilot" if flight.auto_pilot else "Manual"]
@@ -1940,7 +1912,7 @@ func _process(delta: float) -> void:
 func arguments() -> void:
 	var args := OS.get_cmdline_user_args()
 	var ipa := ""
-	var mode := ""
+	var mode := "flight" if OS.has_feature("touch_preview") else ""
 	for arg in args:
 		if arg.begins_with("--ipa="):
 			ipa = arg.trim_prefix("--ipa=")
@@ -2137,7 +2109,7 @@ func controls_help() -> String:
 	var other := "W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nP · Action freeze    Esc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses."
 	other += "\nOriginal flight controls enables reconstructed iPhone-style agility, inertia and banking. Mouse input is adapted. Off uses the previous remake controls."
 	other += "\nInvert reverses mouse, controller and touch Y. Arrow keys keep their direction."
-	var touch := "Touch: use the centered stick or drag empty space to steer. Hold Fire to shoot; double-tap Fire to enable autofire. Tap Fire once to stop. AUTO appears on the fire button while enabled. Pausing clears autofire."
+	var touch := "Touch: use the stick to steer. Touch nearby in the lower-left area to place the pad there until you release it. Drag the remaining open view to look around. Release to return the camera forward. Slide the right-edge throttle to set cruise speed. Tap Boost for a burst. Hold Fire to shoot; double-tap Fire to enable autofire. Tap Fire once to stop. AUTO appears on the fire button while enabled. Pausing clears autofire.\n\nNavigation engages autopilot. Speedup appears beside it during safe travel; Dock appears near an eligible station. Steering, throttle, Boost and firing return to manual flight at normal time."
 	return touch + "\n\n" + other if settings.touch else other + "\n\n" + touch
 
 

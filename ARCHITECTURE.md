@@ -136,8 +136,8 @@ validates atlas glyph bounds. No original drawing or scheduling code is executed
 `tutorial.gd` schedules visual action highlights from imported radio selection links,
 intervals and blink timing. Its independent saved timer advances beside the readable
 radio clock, once per unpaused frame, regardless of simulation acceleration. It never
-activates controls or gates player input. Core action buttons remain visible on desktop
-as well as touch screens, so imported instructions always have a visible target.
+activates controls or gates player input. Flight action buttons follow the touch-controls
+preference; desktop defaults to hidden while keyboard/controller actions remain available.
 Schema12 saves migrate by skipping highlights whose radio messages were already
 selected; their gameplay and dialogue state remain intact. Current opening saves
 require a valid tutorial cursor, elapsed time and blink phase.
@@ -582,9 +582,11 @@ Flight presentation attaches original burner meshes beneath each hull using sepa
 imported player/NPC attachment tables. Every nozzle retains its own mesh variant,
 position and dimensions; hull display scaling applies to its attachments too.
 HUD artwork and margins are recovered from bounded image/layout declarations.
-Native Godot controls manage action touches independently by finger, while original
-atlas regions and bitmap glyphs draw the flight composition. Imported code is
-never used as the runtime UI or effects implementation.
+Native Godot controls manage action touches independently by finger. The touch HUD
+uses native circular materials and crisp captions around supplied icon silhouettes;
+its composition and control centers follow imported layout declarations. Original
+atlas artwork still supplies radar markers, portraits and content. Imported code
+is never used as the runtime UI or effects implementation.
 
 The modern variable-throttle exhaust scales player plumes against imported cruise
 speed using forward travel per simulation step, including collision clipping.
@@ -642,7 +644,7 @@ coordinates rather than the original fixed-point projection. Original projection
 smoothing and remaining alternate-affiliation cases have not been verified.
 
 Touch-only flight buttons and joystick drawing follow the same explicit touch
-setting as drag steering and the throttle toolbar. Desktop defaults to hidden;
+setting as direct camera dragging and the throttle slider. Desktop defaults to hidden;
 mobile defaults to enabled. Hidden controls cannot claim fingers or consume
 emulated mouse clicks. Status, frame and target markers remain. Pause, Time, Autopilot and Dock
 buttons follow the same touch preference; their keyboard/controller actions remain.
@@ -1017,7 +1019,10 @@ localized description associations and EquipmentList property labels. HangarCata
 projects native inventory and station offers without copying catalogue records or
 prices into the UI. Sorting retains transaction indices. HangarMenu supplies native
 focus, touch scrolling, actions and an Info view inside original atlas artwork.
-Previews preserve aspect ratio within the space left by title, price and actions.
+Equipment rows place the supplied localized type before the item name and the
+icon at the right. The preview and Info view repeat that type from the imported
+category association. Previews preserve aspect ratio within the space left by
+title, type, price and actions.
 
 The nested quantity declaration imports SellCargoWindow art, labels, amount bounds
 and layout associations. CargoSale starts with the current stack and shows a price
@@ -1270,9 +1275,35 @@ touch for that time. Mission dialogue is drawn outside that pass and stays visib
 as it does for ordinary radio messages during play. Keyboard and controller pause
 remain available as a remake convenience.
 
-Touch steering belongs to the supplied stick alone. Once grabbed it follows the
-finger anywhere on screen, clamped to the authored radius, as the source does;
-empty space no longer starts a steering gesture.
+The supplied stick retains its usual fixed-center steering. A touch in nearby
+lower-left space relocates the circular pad for that gesture and starts neutral;
+its base stays at touchdown while the knob follows displacement, clamped to the
+supplied steering radius. The base is inset at screen edges without changing the
+raw neutral input origin. Release, cancellation, pause, viewport resizing and
+HUD teardown return it home. The relocated pad omits the corner backing, and
+navigation/Boost remain in place. Other open space starts an independent camera
+drag after radio and controls have had first refusal. The camera returns smoothly after release; its orbit
+does not change the ship's physical heading, firing direction or cosmetic bank.
+Throttle and action fingers retain ownership outside their starting rectangles.
+Pause, cinematic capture and HUD teardown clear all transient touch state.
+
+`flight_hud_skin.gd` draws smooth cyan double rims, dark recessed disks, shaded
+steering and fire centers, and the curved original-style weapon plaque. Boost,
+weapon-cycle and missile silhouettes are isolated from the supplied textures in
+memory, so no original pixels ship with the engine. Navigation, Time and Dock
+use native glyphs; the navigation icon is a simple arrow pointing at a destination dot.
+Readiness dims action glyphs while keeping their locations and rims legible.
+Resting control materials use the supplied normal atlas's 153/255 opacity and
+paler cyan/teal palette. CanvasGroup composites each layered control before
+applying alpha, keeping overlapping rings from becoming opaque. Pressed actions
+use opaque source-style feedback; raw touches track this state explicitly because
+non-toggle BaseButtons do not retain set_pressed_no_signal. Bar backgrounds use
+the supplied 102/255 opacity; captions retain their independent legibility.
+The shortened throttle has a wider visible track, clearance from the right frame,
+a larger inward-facing touch region, a persistent cruise setting and an optional
+actual-speed caption. Navigation and contextual controls occupy fixed slots;
+speedup and docking share the simulation's eligibility checks. Survival omits
+station navigation. Phone composition remains larger than desktop composition.
 
 Supplied static bodies never steer, so placed mission hulls keep the orientation
 they were given: transit groups face their imported velocity and stationary hulls

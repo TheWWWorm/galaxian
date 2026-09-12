@@ -186,6 +186,7 @@ func populate() -> void:
 		rows.add_child(empty)
 	else:
 		var last_group := -1
+		var type_width := type_column_width()
 		for index in records.size():
 			var entry: Dictionary = records[index]
 			if section == "shop":
@@ -210,6 +211,9 @@ func populate() -> void:
 			button.set_meta("entry", index)
 			button.text = Catalogue.name(library, entry)
 			button.icon = Catalogue.image(library, entry)
+			button.icon_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			var item_type := Catalogue.type_name(library, entry)
+			button.tooltip_text = (item_type + " " if not item_type.is_empty() else "") + button.text
 			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			button.clip_text = true
 			button.custom_minimum_size = art.row.get_size()
@@ -225,15 +229,36 @@ func populate() -> void:
 				else:
 					skin = StyleBoxTexture.new()
 					skin.texture = art.row
-				skin.content_margin_left = 3
+				skin.content_margin_left = type_width + 6 if not item_type.is_empty() else 3
 				skin.content_margin_right = 3
 				button.add_theme_stylebox_override(state, skin)
+			if not item_type.is_empty():
+				var type_label := Label.new()
+				type_label.name = "ItemType"
+				type_label.text = item_type
+				type_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				type_label.position = Vector2(3, 0)
+				type_label.size = Vector2(type_width, art.row.get_height())
+				type_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				type_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+				type_label.add_theme_font_override("font", font)
+				type_label.add_theme_font_size_override("font_size", int(font.get_meta("source_height")))
+				type_label.add_theme_color_override("font_color", Color("91aeb3"))
+				button.add_child(type_label)
 			button.pressed.connect(select_entry.bind(index))
 			button.focus_entered.connect(select_entry.bind(index))
 			rows.add_child(button)
 			if index == selected:
 				call_deferred("focus_row", weakref(button))
 	queue_redraw()
+
+
+func type_column_width() -> float:
+	var width := 0.0
+	var pixels := int(font.get_meta("source_height"))
+	for entry in records:
+		width = maxf(width, font.get_string_size(Catalogue.type_name(library, entry), HORIZONTAL_ALIGNMENT_LEFT, -1, pixels).x)
+	return clampf(width + 3, 54, art.row.get_width() * .38)
 
 
 func select_entry(index: int) -> void:
@@ -332,6 +357,9 @@ func _draw() -> void:
 			Rect2(preview + Vector2(4, 7), Vector2(art.preview.get_width() - 8, 20)),
 			HORIZONTAL_ALIGNMENT_CENTER
 		)
+		var item_type := Catalogue.type_name(library, entry)
+		if not item_type.is_empty():
+			write(item_type, Rect2(preview + Vector2(4, 25), Vector2(art.preview.get_width() - 8, 18)), HORIZONTAL_ALIGNMENT_CENTER)
 		var picture: Texture2D = Catalogue.image(library, entry, true)
 		if picture != null:
 			draw_texture_rect(picture, preview_rect(picture), false)
@@ -383,7 +411,8 @@ func focus_row(reference: WeakRef) -> void:
 
 func preview_rect(picture: Texture2D) -> Rect2:
 	# Reserve the title, price and transaction row; preserve each supplied aspect ratio.
-	var bounds := Rect2(preview_origin() + Vector2(8, 32), art.preview.get_size() - Vector2(16, 92))
+	var type_height := 18.0 if not Catalogue.type_name(library, current()).is_empty() else 0.0
+	var bounds := Rect2(preview_origin() + Vector2(8, 32 + type_height), art.preview.get_size() - Vector2(16, 92 + type_height))
 	var scale := minf(1.0, minf(bounds.size.x / picture.get_width(), bounds.size.y / picture.get_height()))
 	var extent := picture.get_size() * scale
 	return Rect2(bounds.get_center() - extent * .5, extent)

@@ -13769,7 +13769,7 @@ func check_survival_hud(source: PackedByteArray, lib) -> void:
 	hud._process(0)
 	check(hud.buttons.missiles.visible and not hud.objective.node.visible,"Survival shows unlocked touch missile control and hides campaign objective marker")
 	pilot.active_job.survival.score=0;hud._process(0)
-	check(hud.buttons.missiles.visible and is_equal_approx(hud.buttons.missiles.self_modulate.a, 50.0 / 255),"Locked Survival missile stays visible at the source unavailable opacity")
+	check(hud.buttons.missiles.visible and is_equal_approx(hud.buttons.missiles.availability, 50.0 / 255),"Locked Survival missile stays visible with the source unavailable value applied to its glyph")
 	pilot.active_job.survival.score=200;pilot.elapsed=.1;hud._process(0)
 	var feedback:Dictionary=pilot.hud_feedback.duplicate(true)
 	hud.free();hud=Hud.new();hud.flight=flight;root.add_child(hud);hud.size=Vector2(960,640);hud._process(0)
@@ -20534,6 +20534,19 @@ func check_hangar_runtime(lib) -> void:
 	var data: Dictionary = lib.content.hangar_ui
 	var pilot := Session.new()
 	pilot.configure(lib)
+	var previous_language: String = lib.language_code
+	for language in lib.available_languages():
+		lib.set_language(language)
+		for item_id in lib.items.size():
+			var category := int(lib.items[item_id][1])
+			if category >= lib.CARGO_CATEGORY: continue
+			var item_entry := {"kind": "equipment", "id": item_id, "source": "hold"}
+			var item_type: String = lib.text(int(data.labels.category_base) + category)
+			check(Catalogue.type_name(lib, item_entry) == item_type, "Hangar type follows supplied category and " + language + " localization")
+			check(Catalogue.information(lib, pilot, item_entry).begins_with(item_type + " · " + lib.item_name(item_id)), "Item Info identifies both type and name in " + language)
+	lib.set_language(previous_language)
+	check(Catalogue.type_name(lib, {"kind": "ship", "id": pilot.ship_id}).is_empty(), "Ships do not receive equipment type labels")
+	check(Catalogue.type_name(lib, {"kind": "empty", "category": lib.SHIELD_CATEGORY}).is_empty(), "Empty slots do not duplicate their existing type caption")
 	var entries := Catalogue.entries(lib, pilot, "ship")
 	check(
 		entries[0].id == pilot.ship_id and entries[0].kind == "ship",
@@ -20576,6 +20589,14 @@ func check_hangar_runtime(lib) -> void:
 	app.navigate_back()
 	check(not panel.details and app.screen == "market", "Back first leaves item Info")
 	panel.open_tab("shop")
+	for row in panel.rows.get_children():
+		if not row is Button: continue
+		var record: Dictionary = panel.records[int(row.get_meta("entry"))]
+		if record.kind != "equipment": continue
+		var type_label: Label = row.get_node("ItemType")
+		check(type_label.text == Catalogue.type_name(lib, record), "Shop row displays the supplied equipment type")
+		check(type_label.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Type column leaves the row clickable")
+		check(type_label.get_rect().end.x <= row.get_theme_stylebox("normal").content_margin_left, "Type column does not overlap the item name")
 	var purchase := -1
 	for index in panel.records.size():
 		var entry: Dictionary = panel.records[index]

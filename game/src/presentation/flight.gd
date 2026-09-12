@@ -85,6 +85,11 @@ var checkpoint_elapsed := 0.0
 var first_person := false
 var motion_sensor
 var chase_follow_basis := Basis.IDENTITY
+var chase_view_basis := Basis.IDENTITY
+var touch_camera_active := false
+var touch_camera_angles := Vector2.ZERO
+const TOUCH_CAMERA_RETURN_SECONDS := .22
+const TIME_SLOWDOWN_DISTANCE := 320.0
 var outro_projectiles: Array = []
 var outro_profiles := {}
 var outro_definition := {}
@@ -279,6 +284,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_E:
 				try_dock()
 			KEY_C:
+				reset_touch_camera()
 				first_person = not first_person
 				ship.visible = not first_person
 			KEY_TAB:
@@ -310,6 +316,7 @@ func original_controls() -> bool:
 func apply_control_settings(options: Dictionary) -> void:
 	var previous := original_controls()
 	settings.merge(options, true)
+	if not settings.get("touch", false): reset_touch_camera()
 	if previous != original_controls():
 		mouse_motion = Vector2.ZERO
 		session.motion.turn = [0.0, 0.0]
@@ -344,18 +351,59 @@ func update_player_bank(seconds: float = 0.0) -> void:
 func update_player_hull_frame() -> void:
 	if not is_instance_valid(player_hull): return
 	var frame := Basis.IDENTITY
+	# The normal chase frame owns the hull's cosmetic bank even while a finger
+	# orbits the view. Looking around must not turn the visible or physical ship.
+	var view_basis := global_basis * chase_view_basis
 	if chase_camera_active and not first_person:
 		# Keep the visible hull's heading aligned with the chase camera. The
 		# logical ship still owns navigation, collision, aim and saved orientation.
 		# Only the cosmetic bank/pitch is visible relative to the camera.
-		frame = ship.global_basis.inverse() * camera.global_basis
+		frame = ship.global_basis.inverse() * view_basis
 	var bank := displayed_bank
 	if chase_camera_active and not first_person:
 		# Native controls keep their physical response. Convert camera-relative
 		# deflection into pitch/roll, without showing a sideways yaw pivot.
-		var relative := (camera.global_basis.inverse() * ship.global_basis).get_euler()
+		var relative := (view_basis.inverse() * ship.global_basis).get_euler()
 		bank = Vector3(relative.x, 0, displayed_bank.z if original_controls() else -(chase_follow_basis.inverse() * ship.global_basis).get_euler().y)
 	player_hull.basis = frame * Basis.from_euler(bank) * player_hull_rest
+
+
+func begin_touch_camera() -> void:
+	if session == null or paused or player_destroyed or cinematic_locked(): return
+	touch_camera_active = true
+
+
+func drag_touch_camera(delta: Vector2) -> void:
+	if not touch_camera_active or not delta.is_finite(): return
+	if paused or player_destroyed or cinematic_locked():
+		reset_touch_camera()
+		return
+	# A screen-height sweep turns the view by 180 degrees, independently of
+	# resolution and ship-steering sensitivity. Open-view dragging is always
+	# available; it needs no separate camera button or toggled mode.
+	var sensitivity := PI / maxf(get_viewport().get_visible_rect().size.y, 1.0)
+	touch_camera_angles.x = wrapf(touch_camera_angles.x - delta.x * sensitivity, -PI, PI)
+	touch_camera_angles.y = clampf(touch_camera_angles.y - delta.y * sensitivity, -PI * .42, PI * .42)
+
+
+func end_touch_camera() -> void:
+	touch_camera_active = false
+
+
+func reset_touch_camera() -> void:
+	touch_camera_active = false
+	touch_camera_angles = Vector2.ZERO
+
+
+func cancel_touch_navigation() -> void:
+	auto_pilot = false
+	time_factor = 1
+
+
+func set_touch_throttle(value: float) -> void:
+	if not is_finite(value) or session == null or paused or player_destroyed or cinematic_locked(): return
+	throttle = clampf(value, 0.0, 1.0)
+	cancel_touch_navigation()
 
 
 func cinematic_locked() -> bool:
@@ -371,19 +419,27 @@ func toggle_autopilot() -> void:
 	if cinematic_locked() or session.slot == "survival":
 		return
 	auto_pilot = not auto_pilot
+	time_factor = 1
 	if auto_pilot:
 		throttle = 1.0
 	message_changed.emit("Autopilot engaged" if auto_pilot else "Manual flight")
 
 
 func cycle_time() -> void:
-	var speeds := [1, 2, 4, 8, 16]
+	var speeds := [1, 2, 4, 8, 16] if auto_pilot else [1, 2]
 	time_factor = speeds[(speeds.find(time_factor) + 1) % speeds.size()]
-	if not auto_pilot:
-		time_factor = mini(time_factor, 2)
-	if danger():
+	if (auto_pilot and not can_accelerate_time()) or (not auto_pilot and danger()):
 		time_factor = 1
 	message_changed.emit("Simulation speed ×%d" % time_factor)
+
+
+func can_accelerate_time() -> bool:
+	return (
+		session != null and library != null and not paused and not player_destroyed
+		and not session.docked and auto_pilot
+		and ship.position.distance_to(navigation_target()) >= TIME_SLOWDOWN_DISTANCE
+		and not danger()
+	)
 
 
 func danger() -> bool:
@@ -401,20 +457,30 @@ func danger() -> bool:
 	)
 
 
-func try_dock() -> void:
+func docking_unavailable_reason() -> String:
+	if session == null or library == null or paused or player_destroyed or session.docked:
+		return "Docking is unavailable right now."
 	if session.slot == "survival":
-		return
+		return "Docking is unavailable in survival."
 	if not session.active_job.is_empty():
-		message_changed.emit("Complete the mission objectives to reach the destination station.")
-		return
+		return "Complete the mission objectives to reach the destination station."
 	if station == null:
-		message_changed.emit("Station geometry is unavailable.")
-		return
+		return "Station geometry is unavailable."
 	if ship.position.distance_to(station.position) > dock_radius:
-		message_changed.emit("Approach within %d m of the station to dock." % ceili(dock_radius))
-		return
+		return "Approach within %d m of the station to dock." % ceili(dock_radius)
 	if danger():
-		message_changed.emit("Clear nearby hostiles before docking.")
+		return "Clear nearby hostiles before docking."
+	return ""
+
+
+func can_dock() -> bool:
+	return docking_unavailable_reason().is_empty()
+
+
+func try_dock() -> void:
+	var unavailable := docking_unavailable_reason()
+	if not unavailable.is_empty():
+		if session != null and session.slot != "survival": message_changed.emit(unavailable)
 		return
 	dock_requested.emit()
 
@@ -424,21 +490,20 @@ func _physics_process(delta: float) -> void:
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT): capture_button_held = false
 	if library == null or paused:
 		return
-	if danger():
+	if (auto_pilot and not can_accelerate_time()) or (not auto_pilot and danger()):
 		time_factor = 1
 	elif not auto_pilot:
 		time_factor = mini(time_factor, 2)
-	elif ship.position.distance_to(waypoint) < 320:
-		time_factor = 1
 	var pointer := mouse_motion
 	for substep in time_factor:
 		mouse_motion = pointer
 		step(minf(delta, .05))
 		if paused:
 			break
-		if danger():
+		if (auto_pilot and not can_accelerate_time()) or (not auto_pilot and danger()):
 			time_factor = 1
 			break
+		if substep + 1 >= time_factor: break
 	if paused:
 		return
 	session.advance_radio(delta)
@@ -499,8 +564,19 @@ func step(dt: float) -> void:
 	var frozen: bool = directions.frozen
 	if not directions.locked and not frozen:
 		var pad := controls.snapshot()
+		if (
+			controls.touch_look.length_squared() > .0001 or absf(controls.touch_throttle) > .01
+			or controls.touch_fire or controls.touch_autofire or controls.touch_missiles or controls.touch_boost
+		):
+			cancel_touch_navigation()
 		if settings.get("motion_steering", false) and motion_sensor != null:
-			pad.look += motion_sensor.look(dt, float(settings.get("motion_sensitivity", .5)))
+			var motion_look: Vector2 = motion_sensor.look(dt, float(settings.get("motion_sensitivity", .5)))
+			pad.look += motion_look
+			# The sensor already applies its calibration deadzone. Use the same
+			# remaining-input threshold as manual steering below, so resting tilt
+			# never interrupts travel and intentional phone steering returns to 1x.
+			if settings.get("touch", false) and absf(motion_look.x) + absf(motion_look.y) > .01:
+				cancel_touch_navigation()
 		var up := (
 			float(Input.is_physical_key_pressed(KEY_W))
 			- float(Input.is_physical_key_pressed(KEY_S))
@@ -545,6 +621,7 @@ func step(dt: float) -> void:
 				throttle = 0
 				if session.active_job.is_empty() or session.active_job.get("ready", false):
 					auto_pilot = false
+					time_factor = 1
 		else:
 			advance_turn(Vector2(yaw, pitch), dt)
 		var boost_down: bool = (
@@ -605,6 +682,7 @@ func step(dt: float) -> void:
 					return
 	else:
 		controls.clear()
+		reset_touch_camera()
 		mouse_motion = Vector2.ZERO
 		boost_held = false
 		auto_pilot = false
@@ -1322,6 +1400,7 @@ func objective() -> String:
 func update_camera(dt: float) -> void:
 	player_hit.restore_camera(camera)
 	if outro_active:
+		reset_touch_camera()
 		camera.position = outro_camera_position
 		if camera.position.distance_squared_to(ship.position) > .001:
 			camera.look_at(ship.position, ship.basis.y)
@@ -1331,6 +1410,7 @@ func update_camera(dt: float) -> void:
 	var direction: Dictionary = session.Mission.Sequence.directives(
 		session.mission_definition(), session.active_job
 	)
+	if direction.locked or direction.frozen: reset_touch_camera()
 	var focus: Dictionary = direction.focus
 	if (
 		not focus.is_empty()
@@ -1339,6 +1419,7 @@ func update_camera(dt: float) -> void:
 			or session.Mission.point(focus.get("offset", [0, 0, 0])).length_squared() > 0
 		)
 	):
+		reset_touch_camera()
 		chase_camera_active = false
 		var position: Vector3 = (
 			session.Combat.vector(session.active_job.actors[int(focus.actor)].position)
@@ -1393,6 +1474,11 @@ func update_camera(dt: float) -> void:
 	# The physical firing direction stays on the vertical line through the nose.
 	var local_forward := camera.basis.inverse() * -ship.basis.z
 	camera.basis *= Basis(Vector3.UP, atan2(-local_forward.x, -local_forward.z))
+	chase_view_basis = camera.basis
+	if not touch_camera_active:
+		touch_camera_angles *= exp(-maxf(dt, 0.0) / TOUCH_CAMERA_RETURN_SECONDS)
+		if touch_camera_angles.length_squared() < .000001: touch_camera_angles = Vector2.ZERO
+	camera.basis *= Basis(Vector3.UP, touch_camera_angles.x) * Basis(Vector3.RIGHT, touch_camera_angles.y)
 	# One camera frame owns both position and direction. The hull stays at its fixed screen anchor
 	# through acceleration, small turns and reversals instead of sliding sideways.
 	camera.position = ship.position
@@ -1410,6 +1496,7 @@ func update_camera(dt: float) -> void:
 
 func pause(value: bool) -> void:
 	mouse_motion = Vector2.ZERO
+	reset_touch_camera()
 	paused = value
 	boost_audio.stream_paused = value
 	controls.clear()
@@ -1581,6 +1668,7 @@ func play_mine_sound(id: int) -> void:
 
 
 func lose_ship() -> void:
+	reset_touch_camera()
 	if player_destroyed:
 		return
 	player_destroyed = true
@@ -1628,6 +1716,7 @@ func advance_defeat_presentation(seconds: float) -> void:
 
 
 func begin_outro() -> void:
+	reset_touch_camera()
 	outro_active = true
 	outro_projectiles = session.combat.projectiles.duplicate(true)
 	outro_profiles = session.actor_weapons().duplicate(true)

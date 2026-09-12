@@ -104,12 +104,18 @@ and smoothed bank animation; exact iOS handling is still under validation.
 
 Under **Options → Display → Flight display**, disable **Show flight text overlays**
 to hide the added objective, speed/autopilot readout and notifications. Disable
-**Show extra flight buttons** to hide the added bottom action row while keeping
+**Show extra flight buttons** to hide the throttle and navigation controls while keeping
 the original touch controls. Mission dialogue and required confirmations remain
 visible. **Show touch controls** controls all flight action buttons.
 
-On touchscreens, steer with the centered joystick; it keeps following your finger
-across the screen once you have grabbed it.
+On touchscreens, steer with the joystick; it keeps following your finger across
+the screen once grabbed. Touch nearby in the lower-left area to place the pad
+under your thumb for that gesture; releasing returns it to its usual position.
+Drag the remaining open view to look around; release to return the camera forward. The right-edge throttle keeps its setting
+after release, and Boost triggers a temporary burst. Navigation sits above the
+stick; Speedup appears beside it during safe autopilot, and Dock appears near an
+eligible station. Touch steering, throttle, Boost and firing cancel autopilot
+and return simulation speed to 1×.
 Hold **Fire** to shoot, or **double-tap Fire** to enable autofire. **AUTO** appears
 on the fire button while enabled; tap Fire once to stop. Pausing clears autofire.
 Touch instructions appear first under **Options → Controls → Help** when touch
