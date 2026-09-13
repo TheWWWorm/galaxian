@@ -1,3 +1,4 @@
+![Galaxy on Fire remake — cinematic screenshot 2](https://i.imgur.com/ZGKAZZU.jpeg)
 # Galaxy on Fire native remake
 
 An independent Godot engine for **Galaxy on Fire 1, iPhone edition**. Supply your
@@ -9,7 +10,6 @@ text, missions and catalogues locally. No original game content is included.
 Captured in the remake using locally imported game assets.
 
 ![Galaxy on Fire remake — cinematic screenshot 1](https://i.imgur.com/sA5bYTF.jpeg)
-![Galaxy on Fire remake — cinematic screenshot 2](https://i.imgur.com/ZGKAZZU.jpeg)
 ![Galaxy on Fire remake — cinematic screenshot 3](https://i.imgur.com/qJOEQEk.jpeg)
 
 ## Version 1.0
