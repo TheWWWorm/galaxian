@@ -46,6 +46,9 @@ AI choreography and driver quirks are not claimed to be identical.
 - **Windows x86-64:** extract the package and run `gof1.exe`.
 - **Linux x86-64:** extract and run `gof1.x86_64` (allow execution if your file
   manager removed its executable permission).
+- **Linux ARM64:** extract and run `gof1.arm64` the same way. This build is for
+  64-bit ARM machines such as a Raspberry Pi 5 or an ARM laptop, and needs a
+  working desktop OpenGL or Vulkan driver.
 - **macOS Apple silicon / Intel:** extract the universal `.app` package. It is
   unsigned and not notarized; macOS may require approval in Privacy & Security.
 - **Android ARM64 / x86-64:** install the signed APK, then choose your IPA using
