@@ -14,6 +14,10 @@ var shade := 0.0
 var factor := 1.0
 var origin := Vector2.ZERO
 var indicator_pitch := 0.0
+## The band of the 480x320 canvas between the logo and the footer row.
+const BODY_TOP := 112.0
+const BODY_HEIGHT := 162.0
+const LIST_BOTTOM := 284.0
 
 
 static func valid_data(value: Variant) -> bool:
@@ -148,12 +152,24 @@ func present(
 		canvas.remove_child(child)
 		child.queue_free()
 	buttons.clear()
+	# More entries than the original six rows admit, or a body beside them, and
+	# the page becomes a scrolling column instead of letting rows run off the
+	# artwork or sit on top of the text.
+	var column: bool = (
+		entries.size() > data.row_starts.size() or (not body.is_empty() and not entries.is_empty())
+	)
 	var start := float(data.row_starts[clampi(entries.size() - 1, 0, data.row_starts.size() - 1)])
 	for index in entries.size():
 		var entry: Dictionary = entries[index]
 		var button := make_button(str(entry.text), str(entry.action), art.idle, art.selected)
-		button.position = Vector2((480 - art.idle.get_width()) * .5, start + index * data.row_step)
 		button.size = art.idle.get_size()
+		if column:
+			button.custom_minimum_size = art.idle.get_size()
+			button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		else:
+			button.position = Vector2(
+				(480 - art.idle.get_width()) * .5, start + index * data.row_step
+			)
 		button.disabled = not bool(entry.get("enabled", true))
 		button.tooltip_text = str(entry.get("hint", ""))
 		buttons.append(button)
@@ -169,12 +185,15 @@ func present(
 	if not preload("res://src/presentation/bitmap_font.gd").is_mobile():
 		# Keep Back/Exit at the left and lift it clear of the original lower rim.
 		footer.position.y -= 20
+	var text_bottom := BODY_TOP + BODY_HEIGHT
 	if not body.is_empty():
-		var scroll := ScrollContainer.new()
-		scroll.position = Vector2(38, 112)
-		scroll.size = Vector2(404, 162)
-		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		canvas.add_child(scroll)
+		var height := BODY_HEIGHT
+		if column:
+			# Beside a list the text takes only the lines it needs, so the rows
+			# below it keep as much of the artwork as possible.
+			height = minf(height, measure_body(body))
+			text_bottom = BODY_TOP + height
+		var scroll := scrolling_area(Rect2(Vector2(38, BODY_TOP), Vector2(404, height)))
 		var label := Label.new()
 		label.text = body
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -187,9 +206,24 @@ func present(
 		label.add_theme_constant_override("shadow_offset_x", 1)
 		label.add_theme_constant_override("shadow_offset_y", 1)
 		scroll.add_child(label)
-		var touch = preload("res://src/input/touch_scroll.gd").new()
-		touch.scroll = scroll
-		scroll.add_child(touch)
+	if column:
+		var top := (text_bottom + 6.0) if not body.is_empty() else BODY_TOP
+		var width: float = art.idle.get_width() + 14.0
+		var list := scrolling_area(
+			Rect2(Vector2((480 - width) * .5, top), Vector2(width, LIST_BOTTOM - top))
+		)
+		list.follow_focus = true
+		var rows := VBoxContainer.new()
+		# Half the original row gap: a scrolling column wants rows on screen
+		# more than it wants the spacing of a five-item page.
+		rows.add_theme_constant_override(
+			"separation", maxi(2, int((float(data.row_step) - art.idle.get_height()) * .5))
+		)
+		rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		list.add_child(rows)
+		for button in buttons:
+			canvas.remove_child(button)
+			rows.add_child(button)
 	for button in buttons:
 		if not button.disabled:
 			button.grab_focus()
@@ -197,6 +231,40 @@ func present(
 	if buttons.all(func(button): return button.disabled):
 		footer.grab_focus()
 	layout_canvas()
+
+
+func measure_body(text: String) -> float:
+	var height := float(font.get_meta("source_height"))
+	var lines := font.get_multiline_string_size(
+		text, HORIZONTAL_ALIGNMENT_LEFT, 388, int(height), -1, TextServer.BREAK_WORD_BOUND | TextServer.BREAK_MANDATORY
+	).y
+	return clampf(lines + 4.0, height, BODY_HEIGHT)
+
+
+func scrolling_area(rect: Rect2) -> ScrollContainer:
+	## One scrolling frame for both the text and the row column, with a bar the
+	## artwork behind it cannot swallow.
+	var scroll := ScrollContainer.new()
+	scroll.position = rect.position
+	scroll.size = rect.size
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	canvas.add_child(scroll)
+	var bar := scroll.get_v_scroll_bar()
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0, 0, 0, .35)
+	track.set_corner_radius_all(2)
+	track.content_margin_left = 4
+	track.content_margin_right = 4
+	var grabber := StyleBoxFlat.new()
+	grabber.bg_color = Color(.57, .84, .81, .85)
+	grabber.set_corner_radius_all(2)
+	bar.add_theme_stylebox_override("scroll", track)
+	for state in ["grabber", "grabber_highlight", "grabber_pressed"]:
+		bar.add_theme_stylebox_override(state, grabber)
+	var touch = preload("res://src/input/touch_scroll.gd").new()
+	touch.scroll = scroll
+	scroll.add_child(touch)
+	return scroll
 
 
 func make_button(text: String, action: String, idle: Texture2D, selected: Texture2D) -> Button:

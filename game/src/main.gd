@@ -15,6 +15,11 @@ const SurvivalArchive = preload("res://src/simulation/survival_archive.gd")
 const SurvivalMenu = preload("res://src/presentation/survival_menu.gd")
 const SurvivalName = preload("res://src/presentation/survival_name.gd")
 const SurvivalResult = preload("res://src/presentation/survival_result.gd")
+const SwarmArchive = preload("res://src/simulation/swarm_archive.gd")
+const SwarmRules = preload("res://src/simulation/swarm_rules.gd")
+const SwarmBuild = preload("res://src/simulation/swarm_build.gd")
+const SwarmCards = preload("res://src/presentation/swarm_cards.gd")
+const ChoiceWindow = preload("res://src/presentation/choice_window.gd")
 const TouchScroll = preload("res://src/input/touch_scroll.gd")
 var importer := Importer.new()
 var library := Library.new()
@@ -54,6 +59,8 @@ var defeated_session
 var survival_archive
 var survival_panel
 var survival_name_draft := ""
+var swarm_archive
+var swarm_cards: Array = []
 var flight_buttons := {}
 var save_dialog := FileDialog.new()
 var save_transfer := preload("res://src/simulation/save_transfer.gd").new()
@@ -415,6 +422,18 @@ func caption(title: String, body: String, parent: Node) -> void:
 	paragraph(body, parent)
 
 
+func build_title_panel() -> void:
+	## clear_page() frees the list panel, so every screen that draws into it
+	## rebuilds it rather than assuming the title screen left one behind.
+	if is_instance_valid(title_panel):
+		return
+	title_panel = preload("res://src/presentation/title_menu.gd").new()
+	ui.add_child(title_panel)
+	title_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title_panel.configure(library)
+	title_panel.action_requested.connect(title_action)
+
+
 func show_title() -> void:
 	if survival_active() and not save_game(false):
 		if is_instance_valid(survival_panel) and survival_panel.has_method("retry_action"):
@@ -431,11 +450,7 @@ func show_title() -> void:
 		top.hide()
 		status.hide()
 		page.hide()
-		title_panel = preload("res://src/presentation/title_menu.gd").new()
-		ui.add_child(title_panel)
-		title_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		title_panel.configure(library)
-		title_panel.action_requested.connect(title_action)
+		build_title_panel()
 		show_title_menu("main")
 	else:
 		var box := column(510)
@@ -471,7 +486,8 @@ func show_title_menu(section: String) -> void:
 				{
 					"text": library.text(int(library.content.survival.menu.title)),
 					"action": "survival"
-				}
+				},
+				{"text": "Swarm", "action": "swarm"}
 			]
 		"load":
 			entries = [
@@ -514,6 +530,8 @@ func show_title_menu(section: String) -> void:
 
 
 func title_action(action: String) -> void:
+	if swarm_action(action):
+		return
 	match action:
 		"main", "start", "load", "files", "help", "about", "transfer", "transfer_help":
 			show_title_menu(action)
@@ -529,6 +547,8 @@ func title_action(action: String) -> void:
 			request_start(true)
 		"survival":
 			show_survival_menu()
+		"swarm":
+			show_swarm_menu()
 		"load_campaign":
 			continue_game("campaign")
 		"load_free":
@@ -957,10 +977,19 @@ func survival_active() -> bool:
 	return session != null and session.slot == "survival"
 
 
+func swarm_active() -> bool:
+	return session != null and session.slot == "swarm"
+
+
 func save_game(announce: bool = true) -> bool:
 	# Keep the last viable checkpoint even after leaving the defeat screen.
 	# Closing/backgrounding the app is allowed; it must not save the lost pilot.
-	if session != null and not survival_active() and (session == defeated_session or not session.can_retry()):
+	if (
+		session != null
+		and not survival_active()
+		and not swarm_active()
+		and (session == defeated_session or not session.can_retry())
+	):
 		if announce: notify("The last saved game is preserved. Load it to try again.")
 		return true
 	if transient_preview:
@@ -978,6 +1007,17 @@ func save_game(announce: bool = true) -> bool:
 		else:
 			success = survival_archive.checkpoint()
 			failure = survival_archive.error
+	elif swarm_active() or screen.begins_with("swarm_"):
+		if (
+			swarm_archive == null
+			or swarm_archive.profile.content_id != library.id
+			or (swarm_active() and swarm_archive.session != session)
+		):
+			success = false
+			failure = "The swarm run has no matching archive."
+		else:
+			success = swarm_archive.checkpoint()
+			failure = swarm_archive.error
 	elif session != null:
 		success = session.save(save_path(session.slot))
 		failure = session.error
@@ -987,6 +1027,233 @@ func save_game(announce: bool = true) -> bool:
 	elif announce:
 		notify("Pilot saved.")
 	return success
+
+
+func swarm_rules() -> Dictionary:
+	return SwarmRules.create()
+
+
+func open_swarm_archive() -> bool:
+	if swarm_archive != null and swarm_archive.profile.content_id == library.id:
+		return true
+	var candidate := SwarmArchive.new()
+	if not candidate.open(library, swarm_rules(), save_path("swarm").get_base_dir()):
+		notify(candidate.error)
+		return false
+	swarm_archive = candidate
+	return true
+
+
+func show_swarm_menu() -> void:
+	if not library.content.get("survival") is Dictionary:
+		notify("Arcade data is unavailable in this installation.")
+		return
+	if not open_swarm_archive():
+		return
+	if swarm_active() and not save_game(false):
+		return
+	if not swarm_archive.result_summary().is_empty():
+		show_swarm_result()
+		return
+	stop_flight()
+	clear_page()
+	screen = "swarm_menu"
+	paused = true
+	showcase.show()
+	menu_camera.current = true
+	build_title_panel()
+	page.hide()
+	top.hide()
+	status.hide()
+	var entries: Array = []
+	if swarm_archive.session != null:
+		entries.append({"text": "Resume run", "action": "resume"})
+	var order: Array = SwarmArchive.hull_order(library)
+	var unlocked: Array = swarm_archive.unlocked()
+	var rules: Dictionary = swarm_archive.rules
+	for position in order.size():
+		var id := int(order[position])
+		var slots := SwarmBuild.categories(library, id).size()
+		var open_hull: bool = unlocked.has(id)
+		# The hull the arena actually gives this ship, not its catalogue number:
+		# the two differ by the mode's own scaling, and the menu should not lie.
+		var arena: float = SwarmBuild.max_hull(
+			SwarmBuild.create(id),
+			rules,
+			library,
+			float(library.content.survival.setup.hull)
+		)
+		var label := "%s · %d hull · %d mounts" % [library.ship_name(id), int(arena), slots]
+		if not open_hull:
+			var needed: int = swarm_archive.unlock_points(position)
+			label = "%s · locked · %s at %s" % [
+				library.ship_name(id), swarm_archive.rank_name(position), comma(needed)
+			]
+		entries.append({"text": label, "action": "hull_%d" % id, "enabled": open_hull})
+	var body := "Fend off the swarm; every kill fills the level bar.   Best: %s" % comma(
+		swarm_archive.best_score()
+	)
+	if not swarm_archive.recovered.is_empty():
+		body = swarm_archive.recovered + "\n" + body
+	title_panel.present("swarm", entries, library.text(int(library.content.briefing_ui.labels.back)), "start", body)
+
+
+func comma(value: int) -> String:
+	var text := str(absi(value))
+	var grouped := ""
+	for index in text.length():
+		if index > 0 and (text.length() - index) % 3 == 0:
+			grouped += ","
+		grouped += text[index]
+	return ("-" if value < 0 else "") + grouped
+
+
+func swarm_action(action: String) -> bool:
+	if screen != "swarm_menu":
+		return false
+	if action == "resume":
+		start_swarm(-1)
+		return true
+	if action.begins_with("hull_"):
+		start_swarm(int(action.trim_prefix("hull_")))
+		return true
+	return false
+
+
+func start_swarm(ship_id: int) -> void:
+	if swarm_archive == null:
+		return
+	if swarm_archive.session == null:
+		if ship_id < 0:
+			return
+		if not swarm_archive.start(
+			int(library.content.initial.station_index), ship_id, randi_range(0, 2147483647)
+		):
+			notify(swarm_archive.error)
+			status.show()
+			return
+	stop_flight()
+	session = swarm_archive.session
+	transient_preview = false
+	if session.hull <= 0:
+		show_swarm_result()
+	else:
+		launch(true)
+
+
+func show_swarm_cards() -> void:
+	if not swarm_active() or not session.level_pending():
+		return
+	swarm_cards = session.card_offers()
+	if swarm_cards.is_empty():
+		session.choose_card(null)
+		resume_after_cards()
+		return
+	if is_instance_valid(flight):
+		flight.pause(true)
+	paused = true
+	clear_page()
+	screen = "swarm_cards"
+	page.hide()
+	top.hide()
+	status.hide()
+	survival_panel = ChoiceWindow.new()
+	ui.add_child(survival_panel)
+	survival_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var rules: Dictionary = session.rules
+	survival_panel.present(
+		library,
+		library.content.survival.choice,
+		SwarmCards.prompt(int(session.director.level), int(session.director.pending)),
+		SwarmCards.captions(swarm_cards, rules, library, session.build, session.repair_amounts())
+	)
+	survival_panel.chosen.connect(take_swarm_card)
+
+
+func take_swarm_card(index: int) -> void:
+	if screen != "swarm_cards" or not swarm_active():
+		return
+	var card: Variant = swarm_cards[index] if index < swarm_cards.size() else null
+	if not session.choose_card(card):
+		session.choose_card(null)
+	swarm_cards = []
+	save_game(false)
+	resume_after_cards()
+
+
+func resume_after_cards() -> void:
+	clear_page()
+	if swarm_active() and session.level_pending():
+		show_swarm_cards()
+		return
+	screen = "flight"
+	paused = false
+	show_flight_hud()
+	if is_instance_valid(flight):
+		flight.pause(false)
+
+
+func show_swarm_result() -> void:
+	if swarm_archive == null or swarm_archive.result_summary().is_empty():
+		return
+	if is_instance_valid(flight):
+		flight.pause(true)
+	paused = true
+	clear_page()
+	screen = "swarm_result"
+	page.hide()
+	top.hide()
+	status.hide()
+	survival_panel = SurvivalResult.new()
+	ui.add_child(survival_panel)
+	survival_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	survival_panel.present_result(swarm_archive, library.content.survival.choice)
+	survival_panel.chosen.connect(func(_index): advance_swarm_result())
+
+
+func advance_swarm_result() -> void:
+	if screen != "swarm_result":
+		return
+	if not swarm_archive.receipt.is_empty():
+		if not swarm_archive.acknowledge_result():
+			notify(swarm_archive.error)
+		stop_flight()
+		if swarm_active():
+			session = null
+		show_swarm_menu()
+		return
+	if int(swarm_archive.result_summary().rank) >= 0:
+		clear_page()
+		screen = "swarm_name"
+		page.hide()
+		top.hide()
+		status.hide()
+		survival_panel = SurvivalName.new()
+		ui.add_child(survival_panel)
+		survival_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		survival_panel.present(library, library.content.survival.menu, survival_name_draft)
+		survival_panel.submitted.connect(submit_swarm_name)
+		survival_panel.cancelled.connect(func(): show_swarm_result())
+		return
+	submit_swarm_name("")
+
+
+func submit_swarm_name(pilot: String) -> void:
+	if screen not in ["swarm_name", "swarm_result"]:
+		return
+	survival_name_draft = pilot
+	if not swarm_archive.finish(pilot):
+		if screen == "swarm_name":
+			survival_panel.retry_submission()
+		else:
+			show_swarm_result()
+		notify(swarm_archive.error)
+		status.show()
+		return
+	stop_flight()
+	if swarm_active():
+		session = null
+	show_swarm_result()
 
 
 func show_survival_menu(tab: int = 0, recent_run: int = 0) -> void:
@@ -1154,6 +1421,7 @@ func launch(resume: bool = false) -> void:
 	flight.mission_failed.connect(func(): defeat(true))
 	flight.mission_completed.connect(finish_mission)
 	flight.message_changed.connect(notify)
+	flight.level_available.connect(show_swarm_cards)
 	show_flight_hud()
 	flight.pause(false)
 	if not save_game():
@@ -1186,6 +1454,11 @@ func finish_mission() -> void:
 
 
 func defeat(timed_out: bool = false) -> void:
+	if swarm_active():
+		flight.pause(true)
+		show_swarm_result()
+		save_game(false)
+		return
 	if survival_active():
 		flight.pause(true)
 		show_survival_result()
@@ -2046,6 +2319,7 @@ func launch_preview() -> void:
 	flight.mission_failed.connect(func(): defeat(true))
 	flight.mission_completed.connect(finish_mission)
 	flight.message_changed.connect(notify)
+	flight.level_available.connect(show_swarm_cards)
 	show_flight_hud()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	flight.throttle = 0

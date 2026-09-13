@@ -6,6 +6,7 @@ signal mission_failed
 signal mission_completed
 signal message_changed(text: String)
 signal objective_changed
+signal level_available
 const Backdrop = preload("res://src/presentation/backdrop.gd")
 const Nebula = preload("res://src/presentation/nebula.gd")
 const Controls = preload("res://src/input/controls.gd")
@@ -60,7 +61,7 @@ var boost_held := false
 var boost: float:
 	get:
 		return (
-			session.Motion.charge(session.motion, library.content.player_motion)
+			session.Motion.charge(session.motion, session.motion_parameters())
 			if session != null
 			else 1.0
 		)
@@ -105,7 +106,7 @@ var outro_settled := false
 func setup(data, state, options: Dictionary, resume: bool = false) -> void:
 	library = data
 	session = state
-	speed = session.Motion.speed(session.motion, library.content.player_motion)
+	speed = session.Motion.speed(session.motion, session.motion_parameters())
 	weapon_timers = session.combat.cooldowns
 	settings.merge(options, true)
 	if not original_controls(): session.motion.turn = [0.0, 0.0]
@@ -188,7 +189,7 @@ func boosting() -> bool:
 
 
 func boost_elapsed() -> float:
-	return maxf(0, float(library.content.player_motion.boost_seconds) - float(session.motion.boost_remaining))
+	return maxf(0, float(session.motion_parameters().boost_seconds) - float(session.motion.boost_remaining))
 
 
 func update_player_exhaust(forward_speed: float, seconds: float = 0.0) -> void:
@@ -332,7 +333,8 @@ func apply_control_settings(options: Dictionary) -> void:
 
 func player_agility() -> float:
 	var data: Dictionary = library.content.player_motion.steering
-	return float(data.agilities[int(library.ships[session.ship_id][int(data.ship_type_column)])])
+	var base := float(data.agilities[int(library.ships[session.ship_id][int(data.ship_type_column)])])
+	return base * session.agility_scale()
 
 
 func advance_turn(input: Vector2, seconds: float) -> void:
@@ -640,7 +642,7 @@ func step(dt: float) -> void:
 		)
 		var start_boost: bool = boost_down and not boost_held and session.motion.boost_remaining <= 0 and session.motion.cooldown <= 0
 		var movement: Dictionary = session.Motion.advance(
-			session.motion, library.content.player_motion, dt, start_boost
+			session.motion, session.motion_parameters(), dt, start_boost
 		)
 		if start_boost:
 			boost_audio.play()
@@ -702,11 +704,11 @@ func step(dt: float) -> void:
 			# Captured controls still allow flight; explicit freeze preserves
 			# velocity for the moment the authored conversation releases it.
 			var movement: Dictionary = session.Motion.advance(
-				session.motion, library.content.player_motion, dt
+				session.motion, session.motion_parameters(), dt
 			)
 			forward_travel = float(movement.forward)
 			ship.position -= ship.basis.z * forward_travel
-			speed = session.Motion.speed(session.motion, library.content.player_motion)
+			speed = session.Motion.speed(session.motion, session.motion_parameters())
 		time_factor = 1
 	for event in session.Mission.advance_mines(
 		session.mission_definition(), session.active_job, dt, ship.position, library
@@ -730,7 +732,7 @@ func step(dt: float) -> void:
 	)
 	if not frozen:
 		var contact: Dictionary = session.BodyContact.advance(
-			session.motion, library.content.player_motion.contact, dt, previous_player, ship.position,
+			session.motion, session.motion_parameters().contact, dt, previous_player, ship.position,
 			session.BodyContact.bodies(session.mission_definition(), session.active_job, previous_actors)
 		)
 		if int(contact.actor) >= 0:
@@ -783,6 +785,10 @@ func step(dt: float) -> void:
 			update_objective()
 	update_objective(false)
 	finish_if_ready()
+	if session.has_method("level_pending") and session.level_pending():
+		# The card dialog owns the pause. Flight resumes when a card is taken.
+		paused = true
+		level_available.emit()
 
 
 func orient_placed_actor(node: Node3D, group: Dictionary, dt: float) -> void:

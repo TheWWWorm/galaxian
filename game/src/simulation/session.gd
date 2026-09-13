@@ -213,6 +213,28 @@ func player_weapon_ids(weapon: int) -> Array[int]:
 	return PlayerArmament.weapon_ids(weapon, library)
 
 
+func motion_parameters() -> Dictionary:
+	## Arcade modes may scale imported movement limits; campaign flight never does.
+	return library.content.player_motion
+
+
+func agility_scale() -> float:
+	return 1.0
+
+
+func arcade() -> bool:
+	## Arcade modes share the imported score HUD, radar art and result screens.
+	return false
+
+
+func arcade_hud() -> Dictionary:
+	return {}
+
+
+func arcade_state() -> Dictionary:
+	return {}
+
+
 func weapon_enabled(_weapon: int) -> bool:
 	return true
 
@@ -950,7 +972,7 @@ func restore(value: Variant) -> bool:
 	):
 		error = "Invalid saved faction rating."
 		return false
-	if not Motion.valid(value.get("motion"), library.content.player_motion):
+	if not Motion.valid(value.get("motion"), motion_parameters()):
 		error = "Invalid saved player movement."
 		return false
 	if not value.has_all(

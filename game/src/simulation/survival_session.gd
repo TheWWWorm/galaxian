@@ -246,6 +246,18 @@ func max_hull() -> float:
 	return float(declarations.get("setup", {}).get("hull", 0))
 
 
+func arcade() -> bool:
+	return true
+
+
+func arcade_hud() -> Dictionary:
+	return declarations.get("hud", {})
+
+
+func arcade_state() -> Dictionary:
+	return active_job.get("survival", {})
+
+
 func mission_definition() -> Dictionary:
 	return arena
 

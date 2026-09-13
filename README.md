@@ -18,6 +18,19 @@ Play the thirteen-mission linear campaign, then explore freely. **Skip campaign 
 Explore** enters exploration directly without completion rewards. Trade, outfit
 ships, accept contracts or play Survival with a separate score archive.
 
+**Swarm** is a remake-authored arcade mode. It opens on a handful of fighters and
+grows into a crowd that closes from every side, with surges after the fifth
+minute. You start with a shield and a slow standing repair, and the swarm hits
+softer early and harder as the run goes on. Every kill fills the level bar under
+your hull and shield readouts, and each level lets you pick one of three upgrade
+cards: mount a new weapon, refit it further up its line, add a muzzle or muzzle
+velocity, extend its range, upgrade your shield, repair hull on every kill, or
+transfer to a different hull. Declining a card repairs a quarter of your hull
+instead, so healing is a choice you make rather than a pickup you chase. Every
+weapon, shield and hull is the one from your game file, unchanged; the
+population, pacing, damage scaling and cards are new to this remake. Reaching a
+rank on the Survival score ladder unlocks the next hull to fly.
+
 The remake adds keyboard/mouse and controller controls, variable throttle, time
 acceleration, persistent checkpoints and a compact desktop interface with scalable
 text. Touch controls are available on mobile and can be switched in Options.
@@ -150,7 +163,7 @@ the mouse, click the flight view to capture it again.
 ## Saves and updates
 
 Each IPA has a separate content identity, cache and saves. Campaign, exploration
-and Survival use separate slots. Checkpoint writes preserve a `.bak` recovery copy;
+Survival and Swarm use separate slots. Checkpoint writes preserve a `.bak` recovery copy;
 failed writes are reported without replacing the last valid save. Previous preview
 pilots remain compatible. Old imported caches may require choosing the IPA again.
 

@@ -54,14 +54,14 @@ func _ready() -> void:
 	add_child(reticle)
 	objective = create_marker(Color("ffca79"), true)
 	setup_artwork()
-	if flight.session.slot == "survival":
-		survival_rules = flight.session.declarations.get("hud", {})
+	if flight.session.arcade():
+		survival_rules = flight.session.arcade_hud()
 		if not survival_rules.is_empty():
 			for key in survival_rules.get("radar", {}).get("images", {}):
 				radar_art[key] = flight.library.ui_image(survival_rules.radar.images[key])
 			survival_score_image = flight.library.ui_image(survival_rules.score_image)
 			if flight.session.hud_feedback.is_empty():
-				var state: Dictionary = flight.session.active_job.survival
+				var state: Dictionary = flight.session.arcade_state()
 				flight.session.hud_feedback = SurvivalFeedback.initialize(
 					int(state.score),
 					int(state.combo),
@@ -124,7 +124,7 @@ func _process(_delta: float) -> void:
 	if cinematic:
 		return
 	if not survival_rules.is_empty():
-		var director: Dictionary = flight.session.active_job.survival
+		var director: Dictionary = flight.session.arcade_state()
 		SurvivalFeedback.advance(
 			flight.session.hud_feedback,
 			survival_rules,
@@ -152,7 +152,7 @@ func _process(_delta: float) -> void:
 	reticle.size = reticle.texture.get_size() * factor
 	reticle.visible = not flight.camera.is_position_behind(aim_point)
 	reticle.position = flight.camera.unproject_position(aim_point) - reticle.size * .5
-	if flight.session.slot == "survival":
+	if flight.session.arcade():
 		objective.node.hide()
 	else:
 		place(objective, flight.waypoint, "objective", true)
@@ -313,7 +313,7 @@ func setup_artwork() -> void:
 			)
 		add_child(control)
 		buttons[action] = control
-	var actions := ["TIME"] if flight.session.slot == "survival" else ["AUTOPILOT", "TIME", "DOCK"]
+	var actions := ["TIME"] if flight.session.arcade() else ["AUTOPILOT", "TIME", "DOCK"]
 	for action in actions:
 		var control := FlightButton.new()
 		control.kind = action
@@ -496,10 +496,12 @@ func _draw() -> void:
 		draw_radar_frame(extent)
 	var x: float = art.shield.get_width() + layout.bar_left_offset
 	var inset: float = layout.bar_inset_twice / 2.0
+	var bar_rows := PackedFloat32Array()
 	for index in 2:
 		var y: float = (
 			layout.hull_top if index == 0 else art.bar.get_height() + layout.shield_top_offset
 		)
+		bar_rows.append(y)
 		HudSkin.panel(self, Rect2(Vector2(x, y), art.bar.get_size()), 2, Color("14413c66"), Color("91aca966"))
 		var key := "hull" if index == 0 else "shield"
 		draw_texture_rect(symbols[key], Rect2(Vector2(layout.icon_left, y), art[key].get_size()), false)
@@ -517,6 +519,11 @@ func _draw() -> void:
 				int(library.content.flight_ui.artwork.colors["hull" if index == 0 else "shield"])
 			)
 		)
+	var arcade_state: Dictionary = flight.session.arcade_state() if flight.session.arcade() else {}
+	if arcade_state.has("level"):
+		# A third bar on the same pitch as hull and shield, below both.
+		var row := bar_rows[1] * 2.0 - bar_rows[0]
+		draw_progress(arcade_state, Rect2(Vector2(x, row), art.bar.get_size()), inset, bar_rows[0])
 	steering_layer.visible = stick_enabled()
 	plaque_layer.visible = touch_enabled
 	weapon_caption.visible = touch_enabled and flight.session.weapon_id >= 0 and survival_rules.is_empty()
@@ -848,6 +855,28 @@ func draw_radar_frame(extent: Vector2) -> void:
 	)
 
 
+func draw_progress(state: Dictionary, rect: Rect2, inset: float, hull_row: float) -> void:
+	## Hull as a number beside its bar, and the level bar beneath it. Arcade runs
+	## are read at a glance mid-turn; a filling bar alone does not say how close.
+	var maximum: float = flight.session.max_hull()
+	if maximum > 0:
+		bitmap(
+			"%d / %d" % [int(ceil(maxf(0.0, flight.session.hull))), int(round(maximum))],
+			Vector2(rect.position.x + rect.size.x + 6, hull_row)
+		)
+	var span := float(state.experience_span)
+	var ratio := 0.0 if bool(state.capped) else clampf(float(state.experience) / maxf(1.0, span), 0, 1)
+	HudSkin.panel(self, rect, 2, Color("14413c66"), Color("91aca966"))
+	draw_rect(
+		Rect2(
+			rect.position + Vector2(inset, inset),
+			Vector2((rect.size.x - inset * 2) * (1.0 if bool(state.capped) else ratio), rect.size.y - inset * 2)
+		),
+		Color("e8c06a")
+	)
+	bitmap("LVL %d" % int(state.level), rect.position + Vector2(rect.size.x + 6, 0))
+
+
 func draw_survival(extent: Vector2) -> void:
 	var state: Dictionary = flight.session.hud_feedback
 	var height: float = flight.library.radio_glyphs().values()[0].size.y
@@ -859,7 +888,7 @@ func draw_survival(extent: Vector2) -> void:
 	var text_at := at + Vector2(survival_rules.score_text[0], survival_rules.score_text[1])
 	# Raise the visible digits within the narrow score frame on both layouts.
 	text_at.y -= 3.0
-	bitmap(str(int(flight.session.active_job.survival.score)), text_at)
+	bitmap(str(int(flight.session.arcade_state().get("score", 0))), text_at)
 	bitmap(
 		SurvivalResult.duration(flight.session.elapsed),
 		Vector2(

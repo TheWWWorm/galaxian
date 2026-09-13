@@ -1108,6 +1108,55 @@ The hidden scene stops advancing and is retired on return. Original integer
 truncation in the camera's intermediate states is not reproduced.
 
 
+### Swarm mode
+
+Swarm is remake-authored and shares no rule block with survival. `swarm_rules.gd`
+holds every authored quantity behind its own validator: population curve, spawn
+band and cadence, surge window, archetype variety, card pool and weights, the
+scaling applied to imported enemy damage and hull, the contact-damage and boost
+multipliers, the standing repair span, the arena hull multiplier and the
+percentage at which imported rank thresholds are read. Nothing there is recovered
+from the supplied game. Every stat those rules multiply is imported: weapon and
+shield catalogue rows, ship hulls and mounts, enemy archetypes, repair amounts,
+contact damage, combo arithmetic and rank names. A rule block change raises its
+version so runs saved under the previous block are refused rather than
+reinterpreted.
+
+`swarm_build.gd` derives weapon ladders from the catalogue itself, ordering each
+category's buyable items by price, and never authors an order. It computes gun
+profiles from those rows and the modifier stacks a run has taken. Category
+modifiers attach to the mount category rather than the weapon, so a refit up a
+ladder keeps its investment; a hull transfer drops unmountable categories while
+their stacks stay dormant. Muzzle identities occupy catalogue-size ranges below
+the reserved legacy mount, and `remember_profile` retains launched velocities so
+projectiles already in flight stay valid after a rebuild.
+
+`swarm_director.gd` owns population and progression and no actors. It reports
+which pool slots should hold which archetype and the arena applies it. Two
+distinct questions are asked of a slot: whether anything is still fighting from
+it, which counts toward the live population, and whether its wreck has finished,
+which frees it for reuse. Conflating them leaves a small arena permanently short
+by the wreck count. Score keeps the imported combo arithmetic exactly; experience
+deliberately does not, because a chained combo inflates superlinearly and must
+drive the board rather than the pacing.
+
+`swarm_session.gd` extends Session through arcade hooks rather than mode tests
+scattered through presentation: `arcade()`, `arcade_hud()`, `arcade_state()`,
+`motion_parameters()` and `agility_scale()` default to campaign behavior and the
+arcade sessions override them. `arcade_state()` also carries level and the
+experience span, which the HUD draws as a third bar below hull and shield.
+Snapshot3 stores per-slot veterancy as captured at spawn, not recomputed from the
+current elapsed time.
+
+`swarm_archive.gd` reuses `arcade_profile.gd` and the imported arcade
+presentation for its result and name-entry screens, committing profile, run and
+receipt in one `swarm-state.json` with the same discipline as survival. Its
+decode path is also the commit self-check and therefore never repairs state it
+should refuse. A separate board-only recovery, used only after decode has
+refused every candidate file, keeps the local records and abandons an unfinished
+run, so a rule-block change costs the run and not the board.
+
+
 ## Defeat and checkpoint recovery
 
 The importer recovers `defeat_ui` text associations and backdrop geometry from

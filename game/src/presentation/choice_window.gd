@@ -1,5 +1,7 @@
 extends Control
-## Source artwork and layout for an acknowledged one- or two-button dialog.
+## Source artwork and layout for an acknowledged multiple-button dialog. The
+## imported panel repeats its middle segment per button, so one and two button
+## dialogs draw exactly as before and longer lists extend downward.
 ## The owning screen pauses gameplay and decides what each choice means.
 signal chosen(index: int)
 var library
@@ -12,6 +14,7 @@ var pressed := -1
 var pointer := -2
 var keyboard_down := false
 var geometry := {}
+const MAX_CHOICES := 6
 
 
 func _ready() -> void:
@@ -35,7 +38,7 @@ func present(data, layout: Dictionary, text: String, labels: Array[String] = [])
 
 
 func measure() -> Dictionary:
-	if library == null or declarations.is_empty() or captions.size() < 1 or captions.size() > 2:
+	if library == null or declarations.is_empty() or captions.size() < 1 or captions.size() > MAX_CHOICES:
 		return {}
 	var art := {}
 	for key in declarations.images:
@@ -52,8 +55,7 @@ func measure() -> Dictionary:
 		+ (lines.size() + layout.extra_rows) * art.body.get_height()
 		+ art.bottom.get_height()
 	)
-	if captions.size() == 2:
-		height += art.middle.get_height()
+	height += art.middle.get_height() * maxi(0, captions.size() - 1)
 	# Preserve native geometry at normal lengths. Fit unusually long localized
 	# messages inside the viewport instead of losing their confirmation button.
 	var canvas := Vector2(480, maxf(320, height + 16))
@@ -137,7 +139,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and not event.echo:
 		if event.physical_keycode in [KEY_UP, KEY_DOWN, KEY_TAB]:
 			if event.pressed and not keyboard_down and pointer == -2:
-				selection = (selection + 1) % captions.size()
+				var step := -1 if event.physical_keycode == KEY_UP else 1
+				selection = posmod(selection + step, captions.size())
 		elif event.physical_keycode in [KEY_ENTER, KEY_SPACE]:
 			confirm_event(event.pressed)
 		else:
@@ -145,7 +148,8 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventJoypadButton:
 		if event.button_index in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN]:
 			if event.pressed and not keyboard_down and pointer == -2:
-				selection = (selection + 1) % captions.size()
+				var step := -1 if event.button_index == JOY_BUTTON_DPAD_UP else 1
+				selection = posmod(selection + step, captions.size())
 		elif event.button_index == JOY_BUTTON_A:
 			confirm_event(event.pressed)
 		else:
