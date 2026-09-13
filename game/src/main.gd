@@ -9,6 +9,7 @@ const RecoveryPanel = preload("res://src/presentation/recovery.gd")
 const Dialogue = preload("res://src/presentation/dialogue.gd")
 const HUD = preload("res://src/presentation/hud.gd")
 const DisplaySettings = preload("res://src/presentation/display_settings.gd")
+const TouchLayout = preload("res://src/presentation/touch_layout.gd")
 const GalaxyMap = preload("res://src/presentation/galaxy_map.gd")
 const SurvivalArchive = preload("res://src/simulation/survival_archive.gd")
 const SurvivalMenu = preload("res://src/presentation/survival_menu.gd")
@@ -45,6 +46,7 @@ var travel_transition
 var hangar_panel
 var options_panel
 var action_freeze_panel
+var touch_layout_panel
 var pause_panel
 var defeat_panel
 var defeat_notice := false
@@ -83,6 +85,7 @@ var settings := {
 	"flight_overlays": true,
 	"extra_flight_buttons": true,
 	"linked_fire": false,
+	"touch_layout": {},
 	"fullscreen": false,
 	"aspect_ratio": "auto"
 }
@@ -287,6 +290,11 @@ func clear_page() -> void:
 		action_freeze_panel.set_process_input(false)
 		action_freeze_panel.queue_free()
 	action_freeze_panel = null
+	if is_instance_valid(touch_layout_panel):
+		touch_layout_panel.hide()
+		touch_layout_panel.set_process_input(false)
+		touch_layout_panel.queue_free()
+	touch_layout_panel = null
 	if is_instance_valid(defeat_panel):
 		defeat_panel.hide()
 		defeat_panel.set_process_input(false)
@@ -1380,7 +1388,13 @@ func show_pause() -> void:
 	pause_panel = preload("res://src/presentation/pause_menu.gd").new()
 	ui.add_child(pause_panel)
 	pause_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	pause_panel.setup(library, controls_help(), survival_active(), not transient_preview)
+	pause_panel.setup(
+		library,
+		controls_help(),
+		survival_active(),
+		not transient_preview,
+		settings.get("touch", false) == true
+	)
 	pause_panel.selected.connect(pause_action)
 
 
@@ -1388,6 +1402,7 @@ func pause_action(action: String) -> void:
 	match action:
 		"resume": resume_flight()
 		"action_freeze": show_action_freeze()
+		"touch_layout": show_touch_layout()
 		"options": show_options()
 		"save": save_game()
 		"menu":
@@ -1445,6 +1460,11 @@ func navigate_back() -> void:
 		close_load_menu()
 	elif screen == "action_freeze":
 		close_action_freeze(false)
+	elif screen == "touch_layout":
+		if is_instance_valid(touch_layout_panel):
+			close_touch_layout(touch_layout_panel.restore)
+		else:
+			show_pause()
 	elif screen == "flight":
 		show_pause()
 	elif screen == "pause":
@@ -1790,6 +1810,7 @@ func load_settings() -> void:
 			settings[key] = file.get_value("options", key)
 	settings.original_flight_controls = settings.original_flight_controls == true
 	settings.motion_steering = settings.motion_steering == true
+	settings.touch_layout = TouchLayout.sanitize(settings.touch_layout)
 	for key in ["music_volume", "effects_volume", "motion_sensitivity"]:
 		var value: Variant = settings[key]
 		settings[key] = clampf(float(value), 0, 1) if (value is float or value is int) and is_finite(float(value)) else 1.0
@@ -2172,6 +2193,34 @@ func close_action_freeze(resume: bool) -> void:
 	clear_page()
 	if resume: resume_flight()
 	else: show_pause()
+
+
+func show_touch_layout() -> void:
+	if screen not in ["flight", "pause"] or not is_instance_valid(flight): return
+	if settings.get("touch", false) != true: return
+	paused = true
+	flight.pause(true)
+	# A player places the controls by looking at them, and the pause menu has
+	# already torn the HUD down, so raise the flight controls again and lay the
+	# editor over the real thing rather than over a drawing of it.
+	show_flight_hud()
+	top.hide()
+	status.hide()
+	page.hide()
+	screen = "touch_layout"
+	touch_layout_panel = preload("res://src/presentation/touch_layout_editor.gd").new()
+	ui.add_child(touch_layout_panel)
+	touch_layout_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	touch_layout_panel.configure(hud)
+	touch_layout_panel.closed.connect(close_touch_layout)
+
+
+func close_touch_layout(layout: Dictionary) -> void:
+	if screen != "touch_layout": return
+	settings.touch_layout = TouchLayout.sanitize(layout)
+	if is_instance_valid(flight): flight.apply_control_settings(settings)
+	save_settings()
+	show_pause()
 
 
 func export_saves() -> void:

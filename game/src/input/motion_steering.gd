@@ -28,11 +28,29 @@ window.gofEnableMotion = async function(done) {
    done('Motion sensor permission was denied.'); return;
   }
   if (!window.gofMotionListening) {
+   // WebKit reports accelerationIncludingGravity as the gravity vector, every
+   // other browser as the equal and opposite reaction, so one of the two always
+   // steered backwards. Normalising to gravity pointing down leaves pitch alone:
+   // flipping a whole vector only shifts the pitch term by PI, and that cancels
+   // against the neutral, which is why only left and right ever read reversed.
+   const webkit = /iP(hone|ad|od)/.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ''));
+   const down = webkit ? 1 : -1;
    window.addEventListener('devicemotion', e => {
     const g = e.accelerationIncludingGravity;
     if (!g || g.x === null || g.y === null || g.z === null) return;
-    const a = ((screen.orientation && screen.orientation.angle) || window.orientation || 0) * Math.PI / 180;
-    window.gofMotion = {x:g.x*Math.cos(a)+g.y*Math.sin(a), y:-g.x*Math.sin(a)+g.y*Math.cos(a), z:g.z, time:performance.now()};
+    // The screen's up axis is the device's +Y at angle 0 and its +X at 90, so
+    // rotating by the reported angle reads the same way held any way up.
+    const o = screen.orientation;
+    const a = (o ? o.angle : (window.orientation || 0)) * Math.PI / 180;
+    const cos = Math.cos(a), sin = Math.sin(a);
+    window.gofMotion = {
+     x: down * (g.x * cos - g.y * sin),
+     y: down * (g.x * sin + g.y * cos),
+     // Pitch keeps the sign the sensor reported, the direction players fly now.
+     z: -down * g.z,
+     time: performance.now()
+    };
    });
    window.gofMotionListening = true;
   }

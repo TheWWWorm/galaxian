@@ -1305,6 +1305,27 @@ actual-speed caption. Navigation and contextual controls occupy fixed slots;
 speedup and docking share the simulation's eligibility checks. Survival omits
 station navigation. Phone composition remains larger than desktop composition.
 
+TouchLayout holds the adjustable placement of every touch control. Each control
+is anchored to its imported place, and a player adjustment is stored as an offset
+in that 480x320 composition plus a size multiplier, so an unfamiliar screen keeps
+the original composition and moves only what the player moved. Controls anchor to
+their own imported slot rather than to a neighbour, so moving the stick no longer
+drags the navigation buttons and moving Pause no longer drags the throttle. A
+button carries its resize through its own composition scale, so artwork, caption
+and touch rectangle grow together; the stick scales its frame, its touch
+rectangle, its floating region and its steering reach, so a larger stick asks for
+a proportionally longer throw. The weapon nameplate travels with the fire button
+it labels. Stored placements are validated on load: unknown control names,
+non-finite offsets, distances beyond any screen and out-of-range sizes are
+discarded rather than stranding a control off screen.
+
+TouchLayoutEditor is reached from the pause menu when touch controls are in use.
+It raises the live HUD the pause menu tore down and lays itself over the real
+controls, so what a player drags is the control itself. It shows every adjustable
+control regardless of docking range or the extra-controls preference, steps its
+panel aside while a control is being dragged, and offers per-control and whole-
+composition resets alongside Done and Cancel.
+
 Supplied static bodies never steer, so placed mission hulls keep the orientation
 they were given: transit groups face their imported velocity and stationary hulls
 hold their placement. Only scenery debris with no declared behavior still tumbles.
@@ -1313,8 +1334,15 @@ MotionSteering supplies optional calibrated gravity-based phone tilt with a dead
 zone, smoothing, sensitivity and recentering. Native gravity/accelerometer and browser
 DeviceMotion inputs are supported, both normalized to screen-space gravity pointing
 down at rest, so a right-edge-down roll steers right like a stick pushed right.
+WebKit reports accelerationIncludingGravity as the gravity vector and every other
+browser as the equal and opposite reaction, so the browser bridge normalizes the
+sign before rotating the reading into screen space; without that, one of the two
+families always steered backwards left to right while pitch read correctly,
+because negating the whole vector only shifts the pitch term by PI and the
+calibrated neutral cancels it. The rotation follows the reported orientation
+angle, so a browser held in portrait reads the same way as one in landscape.
 Absolute tilt avoids integrated gyro drift; this is not a reconstruction of GOF2
-sensor tuning. Only the horizontal direction has been corrected from device reports.
+sensor tuning.
 Selecting motion steering hides the fixed and floating touch pad and releases
 any current pad owner. Flight also clears stale pad input before taking its input
 snapshot. Sensor filtering continues during autopilot, but contributes steering

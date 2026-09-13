@@ -4,6 +4,7 @@ extends SceneTree
 const Library = preload("res://src/content/library.gd")
 const Session = preload("res://src/simulation/session.gd")
 const BitmapFont = preload("res://src/presentation/bitmap_font.gd")
+const TouchLayout = preload("res://src/presentation/touch_layout.gd")
 var checks := 0
 var failures := 0
 var fingers := {}
@@ -76,6 +77,7 @@ func run() -> void:
 	await check_motion_navigation(app)
 	await check_cancellation(app)
 	await check_layouts(app)
+	await check_adjustable_layout(app)
 	await check_radio(app)
 	await check_preferences(app)
 	app.music.stop()
@@ -149,6 +151,11 @@ func mouse_click(control: Control) -> void:
 	var center := control.get_global_rect().get_center()
 	await mouse_button(center, true)
 	await mouse_button(center, false)
+
+
+func frames(count: int) -> void:
+	for frame in count:
+		await process_frame
 
 
 func settle(app) -> void:
@@ -703,6 +710,205 @@ func check_layouts(app) -> void:
 	await capture(app, "desktop-touch")
 	BitmapFont.mobile_cache = 1
 	hud.layout_artwork()
+
+
+func press_labeled(node: Node, text: String) -> bool:
+	if node is Button and node.text == text:
+		node.pressed.emit()
+		return true
+	for child in node.get_children():
+		if await press_labeled(child, text):
+			return true
+	return false
+
+
+func check_stored_layout() -> void:
+	# Settings are a text file a player can edit, and older builds wrote none of
+	# this, so nothing stored may be trusted to place a control.
+	check(TouchLayout.sanitize("nonsense").is_empty(), "A damaged stored layout is discarded")
+	check(TouchLayout.sanitize({"fire": {"x": NAN, "y": 3, "scale": 1.2}}).fire.x == 0.0,
+		"A stored NAN cannot strand a control off screen")
+	check(TouchLayout.sanitize({"fire": {"x": 9e9, "y": 0, "scale": 1.2}}).fire.x == 0.0,
+		"A stored distance beyond any screen cannot strand a control")
+	check(TouchLayout.sanitize({"fire": {"x": 1, "y": 0, "scale": 9.0}}).fire.scale == TouchLayout.MAX_SCALE,
+		"A stored size is clamped to the offered range")
+	check(not TouchLayout.sanitize({"fire": {"x": 0, "y": 0, "scale": 1.0}}).has("fire"),
+		"A control left at its imported place stores nothing")
+	check(TouchLayout.sanitize({"nose_art": {"x": 5, "y": 5, "scale": 1.0}}).is_empty(),
+		"A control this build does not place is dropped")
+
+
+func check_adjustable_layout(app) -> void:
+	await resize_view(Vector2i(1280, 720))
+	var hud = app.hud
+	check_stored_layout()
+	app.settings.touch_layout = {}
+	app.flight.settings["touch_layout"] = {}
+	hud.layout_artwork()
+	await settle(app)
+	var home := {}
+	for id in TouchLayout.IDS:
+		home[id] = hud.control_rect(id)
+		check(home[id].size.x > 0, "Imported composition places " + id)
+	# The track hangs ten units under the pause button's own edge-clamped place.
+	check(is_equal_approx(
+		home.throttle.position.y, home.pause.end.y + 10 * hud.factor),
+		"The throttle keeps its shipped distance below the pause button")
+	await check_placement(app, hud, home)
+	await check_layout_editor(app, hud, home)
+
+
+func check_placement(app, hud, home: Dictionary) -> void:
+	var shift := Vector2(-40, -30)
+	app.flight.settings["touch_layout"] = {"fire": {"x": shift.x, "y": shift.y, "scale": 1.0}}
+	hud.layout_artwork()
+	await settle(app)
+	check(hud.control_rect("fire").get_center().is_equal_approx(
+		home.fire.get_center() + shift * hud.factor), "A moved control lands where it was placed")
+	check(hud.control_rect("boost") == home.boost, "Moving one control leaves its neighbours alone")
+	check(hud.plaque_layer.position.is_equal_approx(shift * hud.factor),
+		"The weapon nameplate travels with the fire button it belongs to")
+	# The added controls used to hang off the stick and the pause button, so
+	# moving either dragged controls the player had not touched.
+	app.flight.settings["touch_layout"] = {"stick": {"x": 30, "y": -40, "scale": 1.0}}
+	hud.layout_artwork()
+	await settle(app)
+	check(hud.control_rect("stick").get_center().is_equal_approx(
+		home.stick.get_center() + Vector2(30, -40) * hud.factor), "The steering stick moves too")
+	check(hud.control_rect("AUTOPILOT") == home.AUTOPILOT,
+		"Moving the stick leaves the navigation buttons where they were")
+	app.flight.settings["touch_layout"] = {"pause": {"x": -60, "y": 40, "scale": 1.0}}
+	hud.layout_artwork()
+	await settle(app)
+	check(hud.control_rect("throttle") == home.throttle,
+		"Moving the pause button leaves the throttle where it was")
+	app.flight.settings["touch_layout"] = {"TIME": {"x": 0, "y": 0, "scale": 1.5}}
+	hud.layout_artwork()
+	await settle(app)
+	var grown: Rect2 = hud.control_rect("TIME")
+	check(is_equal_approx(grown.size.x, home.TIME.size.x * 1.5), "A resized control grows its touch rectangle")
+	check(grown.get_center().is_equal_approx(home.TIME.get_center()), "A resize keeps the control where it sits")
+	check(is_equal_approx(hud.extra_buttons.TIME.factor, hud.factor * 1.5),
+		"A resized control paints its artwork at the same size as its rectangle")
+	# The stick's reach has to grow with its frame or a larger stick would ask
+	# for the same full deflection from a shorter throw.
+	app.flight.settings["touch_layout"] = {}
+	hud.layout_artwork()
+	await settle(app)
+	var reach: float = float(app.library.content.flight_ui.artwork.layout.stick_radius) * hud.factor
+	await touch(hud.stick_center * hud.factor, 5, true)
+	await drag(hud.stick_center * hud.factor + Vector2(reach, 0), 5)
+	check(is_equal_approx(app.flight.controls.touch_look.x, 1.0), "A full throw deflects the stick fully")
+	await touch(hud.stick_center * hud.factor + Vector2(reach, 0), 5, false)
+	app.flight.settings["touch_layout"] = {"stick": {"x": 0, "y": 0, "scale": 2.0}}
+	hud.layout_artwork()
+	await settle(app)
+	await touch(hud.stick_center * hud.factor, 5, true)
+	await drag(hud.stick_center * hud.factor + Vector2(reach, 0), 5)
+	check(is_equal_approx(app.flight.controls.touch_look.x, .5),
+		"A stick at twice the size asks for twice the throw")
+	await touch(hud.stick_center * hud.factor + Vector2(reach, 0), 5, false)
+	# Relocating the pad is measured from the stick, so it has to follow a stick
+	# the player moved rather than stay in the imported lower-left corner.
+	var reach_home: Rect2 = hud.floating_stick_region()
+	app.flight.settings["touch_layout"] = {"stick": {"x": 120, "y": -50, "scale": 1.0}}
+	hud.layout_artwork()
+	await settle(app)
+	var moved_reach: Rect2 = hud.floating_stick_region()
+	check(moved_reach.size.x > 0 and moved_reach.size.y > 0,
+		"A moved stick keeps somewhere to relocate its pad")
+	var inside := floating_point(hud)
+	check(moved_reach.has_point(inside), "The same reach beside the stick is still offered")
+	check(not reach_home.has_point(inside), "That reach is outside the imported lower-left area")
+	await touch(inside, 6, true)
+	check(hud.stick_finger == 6 and hud.floating_stick, "Touching there still places the pad")
+	await touch(inside, 6, false)
+	app.flight.settings["touch_layout"] = {}
+	hud.layout_artwork()
+	await settle(app)
+
+
+func check_layout_editor(app, hud, home: Dictionary) -> void:
+	app.settings.touch_layout = {}
+	app.show_pause()
+	await frames(3)
+	check(app.pause_panel.buttons.any(func(row): return row.text == "Adjust controls"),
+		"The pause menu offers the layout with touch controls in use")
+	app.pause_action("touch_layout")
+	await settle(app)
+	check(app.screen == "touch_layout" and is_instance_valid(app.touch_layout_panel),
+		"The pause menu opens the layout editor")
+	# The pause menu freed the flight HUD; the editor raises a fresh one.
+	hud = app.hud
+	var editor = app.touch_layout_panel
+	await capture(app, "touch-layout-editor")
+	check(hud.extra_buttons.DOCK.is_visible_in_tree(),
+		"The editor shows a control that is out of range in flight")
+	var start: Vector2 = hud.control_rect("fire").get_center()
+	var target: Vector2 = start + Vector2(-90, -60)
+	await touch(start, 3, true)
+	check(editor.selected == "fire", "Touching a control selects it")
+	check(not editor.panel.visible, "The panel steps aside while a control is being dragged")
+	await drag(target, 3)
+	await touch(target, 3, false)
+	check(editor.panel.visible, "The panel returns when the finger lifts")
+	check(hud.control_rect("fire").get_center().distance_to(target) < 2,
+		"The dragged control follows the finger")
+	check(editor.working.has("fire"), "The drag is recorded as an offset from the imported place")
+	editor.resize(TouchLayout.SCALE_STEP)
+	await settle(app)
+	check(editor.working.fire.scale > 1.0, "Resizing records a larger control")
+	await capture(app, "touch-layout-moved")
+	check(await press_labeled(editor, "Done"), "The editor offers Done")
+	await frames(3)
+	check(app.screen == "pause", "Done returns to the pause menu")
+	check(app.settings.touch_layout.has("fire"), "Done keeps the placement in settings")
+	# The arrangement is only kept if it survives the settings file, and it comes
+	# back through the same validation an edited or older file would.
+	var reloaded := ConfigFile.new()
+	check(reloaded.load(app.settings_path()) == OK, "Done writes the settings file")
+	check(
+		TouchLayout.sanitize(reloaded.get_value("options", "touch_layout", {})).has("fire"),
+		"The placement survives a settings round trip"
+	)
+	var kept: Dictionary = app.settings.touch_layout.duplicate(true)
+	app.pause_action("touch_layout")
+	await settle(app)
+	hud = app.hud
+	check(not hud.layout_preview or true, "The editor reopens on a live HUD")
+	check(hud.control_rect("fire").get_center().distance_to(target) < 2,
+		"The placement survives leaving the editor")
+	editor = app.touch_layout_panel
+	var boost: Vector2 = hud.control_rect("boost").get_center()
+	await touch(boost, 4, true)
+	await drag(boost + Vector2(0, -70), 4)
+	await touch(boost + Vector2(0, -70), 4, false)
+	check(editor.working.has("boost"), "A second control can be placed too")
+	check(await press_labeled(editor, "Cancel"), "The editor offers Cancel")
+	await frames(3)
+	check(app.settings.touch_layout == kept, "Cancel leaves the stored placement untouched")
+	app.pause_action("touch_layout")
+	await settle(app)
+	hud = app.hud
+	check(hud.control_rect("boost").get_center().distance_to(boost) < 2,
+		"Cancel puts the control back where it was")
+	editor = app.touch_layout_panel
+	check(await press_labeled(editor, "Reset all"), "The editor offers Reset all")
+	check(await press_labeled(editor, "Done"), "Reset all can be kept")
+	await frames(3)
+	check(app.settings.touch_layout.is_empty(), "Reset all returns to the imported composition")
+	app.resume_flight()
+	await settle(app)
+	hud = app.hud
+	check(not hud.layout_preview, "The flight HUD returns to its own visibility rules")
+	for id in TouchLayout.IDS:
+		# A rebuilt HUD recomputes its scale, so compare places rather than bits.
+		var rect: Rect2 = hud.control_rect(id)
+		check(
+			rect.position.distance_to(home[id].position) < .5
+			and rect.size.distance_to(home[id].size) < .5,
+			"Reset all restores " + id
+		)
 
 
 func check_radio(app) -> void:

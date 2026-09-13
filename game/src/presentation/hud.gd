@@ -5,6 +5,7 @@ const SurvivalResult = preload("res://src/presentation/survival_result.gd")
 const FlightButton = preload("res://src/presentation/touch_flight_button.gd")
 const HudSkin = preload("res://src/presentation/flight_hud_skin.gd")
 const Throttle = preload("res://src/presentation/touch_throttle.gd")
+const TouchLayout = preload("res://src/presentation/touch_layout.gd")
 var survival_rules := {}
 var survival_score_image: Texture2D
 var flight
@@ -21,6 +22,13 @@ var stick_vector := Vector2.ZERO
 var stick_offset := Vector2.ZERO
 var stick_anchor := Vector2.ZERO
 var floating_stick := false
+var stick_scale := 1.0
+var stick_pivot := Vector2.ZERO
+var stick_home := Vector2.ZERO
+var plaque_center := Vector2.ZERO
+## Set while the layout editor is open, so every adjustable control stays on
+## screen even paused, undocked and with nothing in range.
+var layout_preview := false
 var steering_layer: CanvasGroup
 var plaque_layer: CanvasGroup
 var weapon_caption := Node2D.new()
@@ -344,14 +352,25 @@ func layout_artwork() -> void:
 	factor = preload("res://src/presentation/bitmap_font.gd").composition_scale(size)
 	var extent := size / factor
 	var layout: Dictionary = flight.library.content.flight_ui.artwork.layout
-	stick_origin = Vector2(
+	var moves := TouchLayout.sanitize(flight.settings.get("touch_layout", {}))
+	# Anchor every control to its imported place rather than to the control beside
+	# it, so a player moving one never drags its neighbours along.
+	stick_home = Vector2(
 		layout.stick_left, extent.y - art.stick_frame.get_height() - layout.stick_bottom
 	)
 	# The frame's ring is asymmetric within its atlas rectangle. The original
 	# draw places the frame three texels below its constructor's touch origin.
 	# Account for that offset and the half-texel center of the ring's pixels.
 	var pivot: float = (art.stick_frame.get_width() - art.stick_normal.get_width()) * 2.0
-	stick_center = stick_origin + Vector2(pivot + .5, pivot - 3.5)
+	stick_scale = TouchLayout.scale_of(moves, "stick")
+	stick_pivot = Vector2(pivot + .5, pivot - 3.5)
+	stick_origin = stick_home + TouchLayout.offset_of(moves, "stick")
+	# A resized stick grows from its frame's corner, which is the point the touch
+	# rectangle and the floating-stick region are both measured from.
+	stick_origin = stick_origin.clamp(
+		Vector2.ZERO, extent - art.stick_frame.get_size() * stick_scale
+	)
+	stick_center = stick_origin + stick_pivot * stick_scale
 	stick_anchor = stick_center
 	var centers := {
 		"pause": Vector2(extent.x - layout.pause_right, layout.pause_top),
@@ -361,38 +380,62 @@ func layout_artwork() -> void:
 		"weapon": Vector2(extent.x - layout.weapon_right, extent.y - layout.weapon_bottom),
 		"missiles": Vector2(extent.x - layout.missiles_right, extent.y - layout.missiles_bottom)
 	}
+	plaque_center = centers.fire
 	for action in buttons:
 		var control = buttons[action]
-		control.factor = factor
-		var dimensions: Vector2 = control.texture_normal.get_size()
-		control.position = (centers[action] - dimensions * .5) * factor
+		var scale: float = TouchLayout.scale_of(moves, action)
+		# The button paints itself in composition units, so its own scale carries
+		# the resize and the artwork grows with the hit rectangle.
+		control.factor = factor * scale
+		var dimensions: Vector2 = control.texture_normal.get_size() * scale
+		var center: Vector2 = centers[action] + TouchLayout.offset_of(moves, action)
+		control.position = (center - dimensions * .5) * factor
 		control.size = dimensions * factor
 		# Keep the full modern hit rectangle inside safe viewport edges.
 		control.position = control.position.clamp(Vector2.ZERO, size - control.size)
 	# Preserve the imported action composition; new controls occupy fixed spaces.
-	var navigation := Vector2(stick_origin.x, stick_origin.y - 44)
-	var extra_origins := {
+	var navigation := Vector2(stick_home.x + 22, stick_home.y - 22)
+	var extra_centers := {
 		"AUTOPILOT": navigation,
 		"TIME": navigation + Vector2(46, 0),
-		"DOCK": centers.missiles + Vector2(-44, -80)
+		"DOCK": centers.missiles + Vector2(-22, -58)
 	}
 	for action in extra_buttons:
 		var control = extra_buttons[action]
-		control.factor = factor
-		control.size = Vector2(44, 44) * factor
-		control.position = (extra_origins[action] * factor).clamp(Vector2.ZERO, size - control.size)
+		var scale: float = TouchLayout.scale_of(moves, action)
+		control.factor = factor * scale
+		control.size = Vector2(44, 44) * factor * scale
+		var center: Vector2 = extra_centers[action] + TouchLayout.offset_of(moves, action)
+		control.position = (
+			(center * factor - control.size * .5).clamp(Vector2.ZERO, size - control.size)
+		)
 		control.queue_redraw()
-	throttle_control.layout(factor)
+	throttle_control.layout(factor * TouchLayout.scale_of(moves, "throttle"))
 	var margin: float = flight.library.content.flight_ui.radar.margin
 	# Keep the shortened height; the revised wider track has a deliberate gap
 	# from the frame. Its generous touch area still extends inward.
-	throttle_control.position = Vector2(
-		size.x - (margin + 15) * factor - throttle_control.size.x,
-		buttons.pause.position.y + buttons.pause.size.y + 10 * factor
+	# Measure from where the pause button would sit untouched, edge clamp included,
+	# so the track keeps its shipped place whatever the player does with Pause.
+	var pause_art: Vector2 = buttons.pause.texture_normal.get_size() * factor
+	var pause_home: Vector2 = (
+		(centers.pause * factor - pause_art * .5).clamp(Vector2.ZERO, size - pause_art)
 	)
+	throttle_control.position = (
+		Vector2(
+			size.x - (margin + 15) * factor - throttle_control.size.x,
+			pause_home.y + pause_art.y + 10 * factor
+		)
+		+ TouchLayout.offset_of(moves, "throttle") * factor
+	).clamp(Vector2.ZERO, size - throttle_control.size)
 	autofire_label.position = buttons.fire.position
 	autofire_label.size = buttons.fire.size
-	autofire_label.add_theme_font_size_override("font_size", maxi(8, roundi(12 * factor)))
+	autofire_label.add_theme_font_size_override(
+		"font_size", maxi(8, roundi(12 * buttons.fire.factor))
+	)
+	# The nameplate is the fire button's own furniture, so it travels with it.
+	var fire_shift: Vector2 = TouchLayout.offset_of(moves, "fire") * factor
+	plaque_layer.position = fire_shift
+	weapon_caption.position = fire_shift
 	queue_redraw()
 
 
@@ -401,17 +444,22 @@ func refresh_navigation_controls() -> void:
 		return
 	var shown: bool = touch_enabled and not flight.cinematic_locked() and not flight.paused
 	for control: FlightButton in buttons.values():
-		control.visible = touch_enabled
-	var extras: bool = shown and flight.settings.get("extra_flight_buttons", true)
+		control.visible = touch_enabled or layout_preview
+	# The editor shows the whole set at once. Hiding a control a player is about
+	# to place, because the ship happens to be out of docking range, is no help.
+	var extras: bool = (
+		layout_preview or (shown and flight.settings.get("extra_flight_buttons", true))
+	)
 	throttle_control.visible = extras
 	throttle_control.refresh()
 	docking_available = false
 	for action in extra_buttons:
 		var control = extra_buttons[action]
 		var available: bool = extras
-		if action == "TIME": available = available and flight.can_accelerate_time()
-		elif action == "DOCK": available = available and flight.can_dock()
-		if action == "DOCK": docking_available = available
+		if not layout_preview:
+			if action == "TIME": available = available and flight.can_accelerate_time()
+			elif action == "DOCK": available = available and flight.can_dock()
+		if action == "DOCK": docking_available = available and not layout_preview
 		control.visible = available
 		control.active = action == "AUTOPILOT" and flight.auto_pilot
 		control.multiplier = flight.time_factor
@@ -547,7 +595,7 @@ func _input(event: InputEvent) -> void:
 				throttle_finger = -2
 				throttle_control.set_throttle_at(event.position)
 			get_viewport().set_input_as_handled()
-		elif stick_enabled() and Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(event.position):
+		elif stick_enabled() and stick_rect().has_point(event.position):
 			if stick_finger == -1:
 				begin_stick(event.position, -2, false)
 			get_viewport().set_input_as_handled()
@@ -607,7 +655,7 @@ func _input(event: InputEvent) -> void:
 				throttle_control.set_throttle_at(event.position)
 			get_viewport().set_input_as_handled()
 			return
-		if stick_enabled() and Rect2(stick_origin * factor, art.stick_frame.get_size() * factor).has_point(event.position):
+		if stick_enabled() and stick_rect().has_point(event.position):
 			if stick_finger == -1:
 				begin_stick(event.position, event.index, false)
 			get_viewport().set_input_as_handled()
@@ -624,11 +672,29 @@ func _input(event: InputEvent) -> void:
 			steer_touch(event.position)
 
 
+func stick_rect() -> Rect2:
+	return Rect2(stick_origin * factor, art.stick_frame.get_size() * factor * stick_scale)
+
+
+func control_rect(id: String) -> Rect2:
+	## Where an adjustable control currently sits, for the layout editor.
+	if id == "stick":
+		return stick_rect()
+	if id == "throttle":
+		return Rect2(throttle_control.position, throttle_control.size)
+	var control = buttons.get(id, extra_buttons.get(id))
+	return Rect2(control.position, control.size) if control != null else Rect2()
+
+
 func floating_stick_region() -> Rect2:
 	if not stick_enabled(): return Rect2()
-	var home := Rect2(stick_origin * factor, art.stick_frame.get_size() * factor)
+	var home := stick_rect()
 	var nearby := home.grow_individual(24 * factor, 60 * factor, 100 * factor, 24 * factor)
-	return nearby.intersection(Rect2(Vector2(0, size.y * .42), Vector2(size.x * .4, size.y * .58)))
+	# The area the pad may be dropped in travels with the pad, so a stick a player
+	# moved across the screen keeps the reach its imported place was given.
+	var reachable := Rect2(Vector2(0, size.y * .42), Vector2(size.x * .4, size.y * .58))
+	reachable.position += (stick_origin - stick_home) * factor
+	return nearby.intersection(reachable)
 
 
 func begin_stick(point: Vector2, finger: int, relocate: bool) -> void:
@@ -640,7 +706,10 @@ func begin_stick(point: Vector2, finger: int, relocate: bool) -> void:
 		# Keep the full circular base on screen. The raw touch remains the neutral
 		# input origin, including when the visible center is inset at an edge.
 		var extent := size / factor
-		var center := stick_anchor.clamp(Vector2(53, 53), Vector2(extent.x * .5 - 48, extent.y - 53))
+		var edge := 53 * stick_scale
+		var center := stick_anchor.clamp(
+			Vector2(edge, edge), Vector2(extent.x * .5 - 48 * stick_scale, extent.y - edge)
+		)
 		stick_offset = center - stick_center
 	else:
 		stick_offset = Vector2.ZERO
@@ -660,26 +729,28 @@ func release_stick() -> void:
 
 
 func paint_steering(canvas: Node2D) -> void:
-	canvas.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE * factor)
-	HudSkin.steering(canvas, stick_origin + stick_offset, stick_center + stick_offset, stick_vector * flight.library.content.flight_ui.artwork.layout.stick_radius, stick_finger != -1, not floating_stick)
+	# The skin draws the stick at its imported size. Scaling the canvas about the
+	# frame's corner resizes the whole assembly without reworking that geometry.
+	var anchor := stick_origin + stick_offset
+	canvas.draw_set_transform(anchor * factor * (1.0 - stick_scale), 0, Vector2.ONE * factor * stick_scale)
+	HudSkin.steering(canvas, anchor, anchor + stick_pivot, stick_vector * flight.library.content.flight_ui.artwork.layout.stick_radius, stick_finger != -1, not floating_stick)
 
 
 func paint_plaque(canvas: Node2D) -> void:
 	canvas.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE * factor)
-	var fire = buttons.fire
-	HudSkin.weapon_plaque(canvas, size / factor, (fire.position + fire.size * .5) / factor)
+	HudSkin.weapon_plaque(canvas, size / factor, plaque_center)
 
 
 func paint_weapon_caption() -> void:
-	var center: Vector2 = (buttons.fire.position + buttons.fire.size * .5) / factor
-	HudSkin.text(weapon_caption, flight.library.item_name(flight.session.weapon_id), Vector2(size.x / factor - 114, center.y + 24.5), 13, factor, HudSkin.PALE, true, 90)
+	HudSkin.text(weapon_caption, flight.library.item_name(flight.session.weapon_id), Vector2(size.x / factor - 114, plaque_center.y + 24.5), 13, factor, HudSkin.PALE, true, 90)
 
 
 func steer_touch(point: Vector2) -> void:
 	if not stick_enabled():
 		release_stick()
 		return
-	stick_vector = ((point / factor - stick_anchor) / float(flight.library.content.flight_ui.artwork.layout.stick_radius)).limit_length()
+	var reach: float = flight.library.content.flight_ui.artwork.layout.stick_radius * stick_scale
+	stick_vector = ((point / factor - stick_anchor) / reach).limit_length()
 	if stick_vector.length() < .08:
 		stick_vector = Vector2.ZERO
 	flight.controls.touch_look = stick_vector

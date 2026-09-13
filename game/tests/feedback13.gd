@@ -83,6 +83,22 @@ func check_motion_axis() -> void:
 		absf(Motion.angles(Vector3(0, -9.8, 0)).y) < .0001,
 		"Vertical term reads zero for a resting phone"
 	)
+	# A sensor reporting the opposite convention mirrors left and right and
+	# leaves pitch untouched, because negating the whole vector only shifts the
+	# pitch term by PI and the neutral cancels it. WebKit reports that opposite
+	# convention, so the browser bridge normalizes it before the angles are read.
+	var plain := Motion.new()
+	var reversed := Motion.new()
+	check(plain.sample(Vector3(0, -9.8, 0), .1, .5) == Vector2.ZERO, "Upright phone is neutral")
+	check(
+		reversed.sample(Vector3(0, 9.8, 0), .1, .5) == Vector2.ZERO,
+		"Reversed convention is neutral too"
+	)
+	var upright := plain.sample(Vector3(3, -9, -3), 1, .5)
+	var opposite := reversed.sample(Vector3(-3, 9, 3), 1, .5)
+	check(absf(upright.x) > .5, "Combined tilt steers sideways")
+	check(absf(upright.x + opposite.x) < .0001, "Reversed convention mirrors left and right")
+	check(absf(upright.y - opposite.y) < .0001, "Reversed convention leaves pitch alone")
 
 
 func check_dust(lib) -> void:

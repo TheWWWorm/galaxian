@@ -4,25 +4,27 @@ signal selected(action: String)
 var help_text := ""
 var survival := false
 var can_save := true
+var can_adjust_controls := false
 var overlay
 var pending_action := ""
 var return_focus: Control
 
 
-func setup(source, help: String, arcade: bool, saving: bool) -> void:
+func setup(source, help: String, arcade: bool, saving: bool, touch: bool = false) -> void:
 	configure(source)
 	data = data.duplicate(true)
 	data.row_step = float(library.content.pause_ui.row_step) * 5.0 / 6.0
 	help_text = help
 	survival = arcade
 	can_save = saving
+	can_adjust_controls = touch
 	action_requested.connect(handle_action)
 	show_root()
 
 
 func show_root() -> void:
 	var labels: Dictionary = library.content.pause_ui.labels
-	present("pause", [
+	var rows := [
 		{"text": library.text(int(labels.resume)), "action": "resume"},
 		{"text": library.text(int(labels.options)), "action": "options"},
 		{"text": library.text(int(labels.help)), "action": "help"},
@@ -30,7 +32,13 @@ func show_root() -> void:
 		{"text": "Save pilot", "action": "save", "enabled": can_save},
 		{"text": library.text(int(labels.menu)), "action": "menu",
 			"hint": "Save your pilot and return to the main menu." if can_save else "Return to the main menu."}
-	], "Abandon run" if survival else "Load / recover", "abandon" if survival else "load")
+	]
+	if can_adjust_controls:
+		# Placing the controls is something a player does while looking at them,
+		# so it belongs beside the flight rather than in the options screen.
+		rows.insert(3, {"text": "Adjust controls", "action": "touch_layout",
+			"hint": "Move and resize the on-screen flight controls."})
+	present("pause", rows, "Abandon run" if survival else "Load / recover", "abandon" if survival else "load")
 	footer.visible = survival or can_save
 	var focusable: Array[Control] = []
 	for button in buttons:
@@ -56,7 +64,7 @@ func handle_action(action: String) -> void:
 			if can_save: selected.emit(action)
 		"load":
 			if can_save and not survival: selected.emit(action)
-		"resume", "options", "menu", "action_freeze": selected.emit(action)
+		"resume", "options", "menu", "action_freeze", "touch_layout": selected.emit(action)
 
 
 func back() -> void:

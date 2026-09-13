@@ -118,6 +118,13 @@ eligible station. In joystick mode, touch steering, throttle, Boost and firing c
 and return simulation speed to 1×.
 Hold **Fire** to shoot, or **double-tap Fire** to enable autofire. **AUTO** appears
 on the fire button while enabled; tap Fire once to stop. Pausing clears autofire.
+
+With touch controls enabled, **Pause → Adjust controls** places them by hand. Drag
+any control to move it, tap one to select it, then use **Smaller** and **Bigger** to
+resize it. The stick, throttle, action buttons and navigation buttons can all be
+moved and resized. **Reset this** restores one control and **Reset all** the whole
+original composition; **Done** keeps the arrangement and **Cancel** discards it.
+Placements are stored per player and follow the original layout on a new screen.
 Touch instructions appear first under **Options → Controls → Help** when touch
 controls are enabled. Android Back pauses/resumes flight or returns from a menu.
 On supported phones, **Options → Controls → Steering settings → Motion steering** enables calibrated
