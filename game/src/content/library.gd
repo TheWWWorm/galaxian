@@ -30,6 +30,7 @@ var reader := Formats.new()
 var error := ""
 var radio_atlases := {}
 var radio_lines_cache := {}
+var bitmap_fonts := {}
 var contract_names := {}
 var sound_cache := {}
 var player_profile_cache := {}
@@ -47,6 +48,7 @@ func open(directory: String, content_id: String, language: String = "gb") -> boo
 	model_materials.clear()
 	radio_atlases.clear()
 	radio_lines_cache.clear()
+	bitmap_fonts.clear()
 	contract_names.clear()
 	sound_cache.clear()
 	player_profile_cache.clear()

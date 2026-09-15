@@ -22626,6 +22626,25 @@ func check_desktop_flight_view(lib) -> void:
 	for value in [lib.text(int(lib.content.recovery.labels.recovered)), "Long localized message with WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"]:
 		for line in font_adapter.wrap_lines(lib, value, 150):
 			check(font_adapter.text_width(lib, line) <= 150, "Displayed font metrics keep wrapped text inside its panel")
+	# The atlas font copies the imported glyph sheet into a font cache, which is
+	# slow enough to stutter a screen change. Build it once per imported library.
+	var restore_mobile: int = font_adapter.mobile_cache
+	font_adapter.mobile_cache = 1
+	lib.bitmap_fonts.clear()
+	var atlas_font = font_adapter.create(lib)
+	check(
+		atlas_font is FontFile
+		and int(atlas_font.get_meta("source_height")) == lib.radio_glyphs().values()[0].size.y
+		and atlas_font.has_char(80),
+		"The atlas font carries the imported glyph height"
+	)
+	check(
+		font_adapter.create(lib) == atlas_font and lib.bitmap_fonts.size() == 1,
+		"A second screen reuses the imported atlas font"
+	)
+	font_adapter.mobile_cache = 0
+	check(font_adapter.create(lib) != atlas_font, "Desktop text stays scalable, not the atlas font")
+	font_adapter.mobile_cache = restore_mobile
 
 
 class SlotTransitionMain:

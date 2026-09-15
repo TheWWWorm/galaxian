@@ -14,6 +14,11 @@ static func create(library) -> FontFile:
 			vector_font.set_meta("source_height", height)
 			desktop_fonts[height] = vector_font
 		return desktop_fonts[height]
+	# Building the atlas font copies the imported glyph sheet into a font cache,
+	# which is slow enough to show as a hitch when a screen is opened. It only
+	# depends on the imported atlas, so keep it with the library that owns it.
+	if library.bitmap_fonts.has(height):
+		return library.bitmap_fonts[height]
 	var font := FontFile.new()
 	font.set_meta("source_height", height)
 	font.fixed_size = height
@@ -30,6 +35,7 @@ static func create(library) -> FontFile:
 		font.set_glyph_size(0, cache, code, region.size)
 		font.set_glyph_uv_rect(0, cache, code, region)
 		font.set_glyph_texture_idx(0, cache, code, 0)
+	library.bitmap_fonts[height] = font
 	return font
 
 
