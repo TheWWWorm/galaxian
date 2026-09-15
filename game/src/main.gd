@@ -41,8 +41,10 @@ var radio: Label
 var dialogue_panel
 var briefing_panel
 var recovery_panel
+var notice_panel
 var briefing_scene
 var menu_scene
+var menu_scene_key := ""
 var title_panel
 var station_panel
 var board_panel
@@ -289,7 +291,7 @@ func button(text: String, callback: Callable, parent: Node, enabled: bool = true
 	return node
 
 
-func clear_page() -> void:
+func clear_page(keep_menu_scene: bool = false) -> void:
 	if is_instance_valid(action_freeze_panel):
 		action_freeze_panel.restore_scene()
 		action_freeze_panel.hide()
@@ -343,12 +345,13 @@ func clear_page() -> void:
 		title_panel.set_process(false)
 		title_panel.queue_free()
 	title_panel = null
-	if is_instance_valid(menu_scene):
+	if is_instance_valid(menu_scene) and not keep_menu_scene:
 		menu_scene.set_process(false)
 		menu_scene.hide()
 		menu_scene.queue_free()
 		menu_camera.current = true
-	menu_scene = null
+		menu_scene = null
+		menu_scene_key = ""
 	if is_instance_valid(survival_panel):
 		survival_panel.set_process_input(false)
 		survival_panel.hide()
@@ -359,6 +362,11 @@ func clear_page() -> void:
 		recovery_panel.hide()
 		recovery_panel.queue_free()
 	recovery_panel = null
+	if is_instance_valid(notice_panel):
+		notice_panel.set_process_input(false)
+		notice_panel.hide()
+		notice_panel.queue_free()
+	notice_panel = null
 	flight_buttons.clear()
 	if is_instance_valid(briefing_scene):
 		briefing_scene.set_process(false)
@@ -442,7 +450,7 @@ func show_title() -> void:
 	screen = "title"
 	paused = false
 	stop_flight()
-	clear_page()
+	clear_page(ready_content)
 	showcase.show()
 	menu_camera.current = true
 	if ready_content:
@@ -566,10 +574,13 @@ func show_dock() -> void:
 	if not session.recovery.is_empty():
 		show_recovery()
 		return
+	if not session.arrival_notices.is_empty():
+		show_arrival_notice()
+		return
 	stop_flight()
 	screen = "dock"
 	paused = false
-	clear_page()
+	clear_page(true)
 	showcase.show()
 	menu_camera.current = true
 	show_menu_scene(false)
@@ -633,7 +644,7 @@ func show_contracts() -> void:
 	if not session.docked or not session.exploration_unlocked():
 		return
 	screen = "contracts"
-	clear_page()
+	clear_page(true)
 	show_menu_scene(false)
 	top.hide()
 	status.hide()
@@ -847,10 +858,6 @@ func activate_content() -> bool:
 
 
 func show_menu_scene(title: bool, preview_location: int = -1) -> void:
-	if is_instance_valid(menu_scene):
-		menu_scene.set_process(false)
-		menu_scene.hide()
-		menu_scene.queue_free()
 	var location := int(
 		session.station_id if session != null else library.content.initial.station_index
 	)
@@ -861,11 +868,25 @@ func show_menu_scene(title: bool, preview_location: int = -1) -> void:
 	var actor := -1
 	if session != null and session.campaign_state == "active":
 		actor = int(library.ship_definition(session.ship_id).actor)
+	# Opening a menu over the same scenery keeps the running ambient animation
+	# instead of restarting it behind the new panel.
+	var key := "%d:%d:%s:%s" % [location, actor, title, preview_location >= 0]
+	if is_instance_valid(menu_scene) and menu_scene_key == key:
+		menu_scene.set_process(true)
+		menu_scene.show()
+		showcase.hide()
+		return
+	if is_instance_valid(menu_scene):
+		menu_scene.set_process(false)
+		menu_scene.hide()
+		menu_scene.queue_free()
+	menu_scene_key = ""
 	menu_scene = preload("res://src/presentation/destination_scene.gd").new() if preview_location >= 0 else preload("res://src/presentation/menu_scene.gd").new()
 	world.add_child(menu_scene)
 	var seed_value := hash(library.id + ":menu:" + str(location) + ":" + str(actor))
 	var configured: bool = menu_scene.configure(library, location) if preview_location >= 0 else menu_scene.configure(library, location, actor, title, seed_value)
 	if configured:
+		menu_scene_key = key
 		showcase.hide()
 	else:
 		notify("Unable to display supplied menu scenery: " + menu_scene.error)
@@ -1749,6 +1770,8 @@ func navigate_back() -> void:
 		show_dock()
 	elif screen == "recovery":
 		acknowledge_recovery()
+	elif screen == "arrival":
+		acknowledge_arrival_notice()
 	elif screen == "briefing":
 		back_briefing()
 	elif screen == "options":
@@ -1787,7 +1810,7 @@ func show_map() -> void:
 		notify("The galaxy opens after the campaign, or through Skip campaign.")
 		return
 	screen = "map"
-	clear_page()
+	clear_page(true)
 	show_menu_scene(false)
 	top.hide()
 	status.hide()
@@ -1944,7 +1967,7 @@ func show_options() -> void:
 	if flight != null:
 		flight.pause(true)
 	screen = "options"
-	clear_page()
+	clear_page(ready_content and flight == null)
 	if ready_content and flight == null:
 		show_menu_scene(options_return_screen == "title" or session == null)
 	if ready_content:
@@ -2400,6 +2423,36 @@ func acknowledge_recovery() -> void:
 	save_game(false)
 
 
+func show_arrival_notice() -> void:
+	# The source shows each arrival notice in the station's acknowledged dialog
+	# before the station screen itself becomes usable.
+	stop_flight()
+	screen = "arrival"
+	paused = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	clear_page(true)
+	showcase.show()
+	menu_camera.current = true
+	show_menu_scene(false)
+	top.hide()
+	status.hide()
+	page.hide()
+	notice_panel = ChoiceWindow.new()
+	ui.add_child(notice_panel)
+	notice_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	notice_panel.present(library, library.content.survival.choice, session.arrival_notices[0])
+	notice_panel.chosen.connect(acknowledge_arrival_notice)
+	play_menu_music(false)
+
+
+func acknowledge_arrival_notice(_index: int = 0) -> void:
+	if screen != "arrival":
+		return
+	session.acknowledge_notice()
+	show_dock()
+	save_game(false)
+
+
 func controls_help() -> String:
 	var other := "W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nP · Action freeze    Esc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses."
 	other += "\nOriginal flight controls enables reconstructed iPhone-style agility, inertia and banking. Mouse input is adapted. Off uses the previous remake controls."
@@ -2440,7 +2493,7 @@ func record_play_time(delta: float, focused: bool) -> void:
 		session.PilotStatistics.advance(
 			session.statistics,
 			delta,
-			screen in ["dock", "market", "contracts", "map", "briefing", "recovery", "flight"]
+			screen in ["dock", "market", "contracts", "map", "briefing", "recovery", "arrival", "flight"]
 			and not paused
 			and focused
 		)

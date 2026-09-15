@@ -2,7 +2,7 @@ extends RefCounted
 ## Campaign completion, skipping, and exploration are distinct saved states.
 ## Imported scenarios drive the native mission state; unsupported chapters remain
 ## unavailable until their behavior has been reconstructed and verified.
-const SCHEMA := 29
+const SCHEMA := 30
 const BodyContact = preload("res://src/simulation/body_contact.gd")
 const PilotStatistics = preload("res://src/simulation/pilot_statistics.gd")
 const ExplorationArea = preload("res://src/simulation/exploration_area.gd")
@@ -17,6 +17,7 @@ const Mission = preload("res://src/simulation/mission.gd")
 const Contracts = preload("res://src/simulation/contracts.gd")
 const ContractEncounters = preload("res://src/simulation/contract_encounters.gd")
 const Market = preload("res://src/simulation/market.gd")
+const StationMessages = preload("res://src/simulation/station_messages.gd")
 const Loadout = preload("res://src/simulation/loadout.gd")
 var loadout := Loadout.new()
 var ship_value := 0
@@ -42,6 +43,9 @@ var active_job := {}
 var exploration := {}
 var contract_rewards: Array = []
 var recovery := {}
+var arrival_baseline := {}
+var credit_notices: Array = []
+var arrival_notices: Array[String] = []
 var checkpoints := {}
 var _contract_definition := {}
 var motion := Motion.create()
@@ -80,6 +84,8 @@ func configure(data, skip: bool = false) -> void:
 	exploration = {}
 	contract_rewards = []
 	recovery = {}
+	credit_notices = []
+	arrival_notices = []
 	checkpoints = {}
 	_contract_definition = {}
 	motion = Motion.create()
@@ -90,6 +96,22 @@ func configure(data, skip: bool = false) -> void:
 	elapsed = 0
 	flight_position = Vector3.ZERO
 	flight_rotation = Vector3.ZERO
+	record_arrival_baseline()
+
+
+func record_arrival_baseline() -> void:
+	arrival_baseline = StationMessages.baseline(
+		credits, reputation(), visited.size(), library.stations.size()
+	)
+
+
+func reputation() -> int:
+	return PilotStatistics.reputation(statistics, library.content.station_ui.status)
+
+
+func acknowledge_notice() -> void:
+	if not arrival_notices.is_empty():
+		arrival_notices.remove_at(0)
 
 
 func exploration_unlocked() -> bool:
@@ -501,9 +523,13 @@ func arrive(destination: int) -> bool:
 		and (destination != expected or (not active_job.is_empty() and not success))
 	):
 		return false
-	if not docked or destination != station_id:
+	# The station screen rebuilds its shop, hangar and board only when the pilot
+	# arrives without an active mission, and always during the campaign. Coming
+	# back from a mission leaves the stock and the remaining offers alone.
+	if not exploration_unlocked() or active_job.is_empty():
 		markets.clear()
 		market_generation += 1
+	var previous_rank := rank()
 	station_id = destination
 	docked = true
 	motion = Motion.create()
@@ -548,7 +574,25 @@ func arrive(destination: int) -> bool:
 			contract_rewards.append(receipt)
 		active_job = {}
 		_contract_definition = {}
+	collect_arrival_notices(previous_rank)
 	return true
+
+
+func collect_arrival_notices(previous_rank: int) -> void:
+	arrival_notices.append_array(
+		StationMessages.collect(
+			library,
+			library.content.station_messages,
+			arrival_baseline,
+			credits,
+			rank(),
+			rank() > previous_rank,
+			reputation(),
+			visited.size(),
+			credit_notices
+		)
+	)
+	record_arrival_baseline()
 
 
 func mission_reward() -> int:
@@ -795,6 +839,7 @@ func capture() -> Dictionary:
 		"statistics": statistics.duplicate(true),
 		"contract_rewards": contract_rewards.duplicate(true),
 		"recovery": recovery.duplicate(true),
+		"credit_notices": credit_notices.duplicate(),
 		"docked": docked,
 		"station_id": station_id,
 		"credits": credits,
@@ -955,6 +1000,16 @@ func restore(value: Variant) -> bool:
 		if value.get("motion") is Dictionary:
 			value.motion.turn = [0.0, 0.0]
 
+	if value is Dictionary and value.get("schema") == 29:
+		value = value.duplicate(true)
+		value.schema = 30
+		# Older saves kept no notice record. Treat credit milestones the pilot
+		# has already passed as seen so reloading cannot repeat them.
+		value.credit_notices = []
+		for record in library.content.station_messages.credit_milestones:
+			if number(value.get("credits")) and int(value.credits) > int(record.threshold):
+				value.credit_notices.append(int(record.flag))
+
 	if (
 		not value is Dictionary
 		or value.get("schema") != SCHEMA
@@ -1001,7 +1056,8 @@ func restore(value: Variant) -> bool:
 			"ship_value",
 			"market_seed",
 			"market_generation",
-			"markets"
+			"markets",
+			"credit_notices"
 		]
 	):
 		error = "Incomplete save."
@@ -1017,6 +1073,9 @@ func restore(value: Variant) -> bool:
 		return false
 	if not ExplorationArea.valid(library, value.get("exploration")):
 		error = "Invalid saved exploration field."
+		return false
+	if not valid_credit_notices(value.get("credit_notices")):
+		error = "Invalid saved arrival notice record."
 		return false
 	if not value.active_job is Dictionary:
 		error = "Invalid mission structure."
@@ -1349,6 +1408,25 @@ func restore(value: Variant) -> bool:
 			var point: Variant = value.checkpoints.get(key)
 			if point is Dictionary and not point.has("checkpoints"):
 				checkpoints[key] = point.duplicate(true)
+	credit_notices = value.credit_notices.map(func(flag): return int(flag))
+	arrival_notices = []
+	# Loading records the compared baseline again, exactly as the source does,
+	# so a reload never replays the notices of an earlier arrival.
+	record_arrival_baseline()
+	return true
+
+
+func valid_credit_notices(value: Variant) -> bool:
+	if not value is Array or value.size() > library.content.station_messages.credit_milestones.size():
+		return false
+	var flags: Array = library.content.station_messages.credit_milestones.map(
+		func(record): return int(record.flag)
+	)
+	var seen: Array = []
+	for flag in value:
+		if not number(flag) or int(flag) != flag or not flags.has(int(flag)) or seen.has(int(flag)):
+			return false
+		seen.append(int(flag))
 	return true
 
 

@@ -46,9 +46,16 @@ func configure(source, pilot) -> void:
 	library = source
 	session = pilot
 	data = library.content.board_ui
-	offers = session.contract_offers().duplicate(true)
-	for index in offers.size():
-		references.append(session.contract_reference(index))
+	# Accepting an offer removes it from the station's list in the source, so a
+	# board that survives the mission must not keep showing the finished job.
+	offers = []
+	var board: Array = session.contract_offers()
+	for index in board.size():
+		var reference: Dictionary = session.contract_reference(index)
+		if session.contract_paid(reference):
+			continue
+		offers.append(board[index].duplicate(true))
+		references.append(reference)
 	font = preload("res://src/presentation/bitmap_font.gd").create(library)
 	for key in library.content.station_ui.images:
 		art[key] = library.ui_image(library.content.station_ui.images[key])

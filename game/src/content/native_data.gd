@@ -346,6 +346,7 @@ func extract_content() -> Dictionary:
 		"menu_traffic": read_phase("Reading menu traffic", menu_traffic),
 		"title_ui": read_phase("Reading title interface", title_menu_presentation),
 		"station_ui": read_phase("Reading station interface", station_menu_presentation),
+		"station_messages": read_phase("Reading station arrival notices", station_messages),
 		"hangar_ui": read_phase("Reading Hangar catalogue artwork", hangar_presentation),
 		"options_ui": read_phase("Reading options menu artwork", options_presentation),
 		"pause_ui": read_phase("Reading pause menu artwork", pause_presentation),
@@ -15486,6 +15487,114 @@ func status_presentation() -> Dictionary:
 		"reputation_max": immediate_at(0x5e136, 0),
 		"reputation_thresholds": thresholds
 	}
+
+
+func station_messages() -> Dictionary:
+	# Arrival notices are declared once in the station module: a predicted rank
+	# gain, a reputation gain, one-shot credit milestones and exploration
+	# milestones. Each notice is a supplied text identifier joined with the
+	# module's own separator and suffix literals; nothing here is invented.
+	var start := symbol_address("__ZN8MStation20checkForMoreMessagesEv")
+	var enter := symbol_address("__ZN8MStation12OnInitializeEv")
+	var text := symbol_address("__ZN8GameText7getTextEi")
+	var append := symbol_address("__Z8ArrayAddIPN11AbyssEngine6StringEEvT_R5ArrayIS3_E")
+	if start < 0 or enter < 0 or text < 0 or append < 0:
+		return {}
+	var calls := {
+		0x72: "__ZN6Status11willLevelUpEi",
+		0xb0: "__ZN6Status8getLevelEv",
+		0x192: "__ZN6Status13getReputationEv",
+		0x1d2: "__ZN6Status13getReputationEv",
+		0x3d4: "__ZN6Status18getExplorationRateEv"
+	}
+	for offset in calls:
+		if call_target(start + offset) != symbol_address(calls[offset]):
+			fail("Unsupported station notice association at 0x%x." % (start + offset))
+			return {}
+	for offset in [0x8c, 0x1a8, 0x1de, 0x2ae, 0x304, 0x358, 0x41e, 0x47a, 0x4d4, 0x52e, 0x584]:
+		if call_target(start + offset) != text:
+			fail("Unsupported station notice localization at 0x%x." % (start + offset))
+			return {}
+	if calls_between(start, symbol_end(start), "__Z8ArrayAddIPN11AbyssEngine6StringEEvT_R5ArrayIS3_E").size() != 6:
+		fail("Unsupported station notice list.")
+		return {}
+	# The predicted rank reads the level before the arrival reward is applied,
+	# so the notice adds one. Keep that association explicit.
+	if u16(start + 0xb6) != 0x3101:
+		fail("Unsupported station rank notice increment.")
+		return {}
+	# LDR of the comparison fields: credits after the reward against the balance
+	# recorded when the station screen was last entered.
+	if u16(start + 0x280) != 0x6d51 or u16(start + 0x282) != 0x6fd3:
+		fail("Unsupported station credit notice comparison.")
+		return {}
+	var separator := embedded_string(literal(start + 0x90, 1))
+	var suffix := embedded_string(literal(start + 0xce, 1))
+	for pair in [[0x1ac, separator], [0x1ee, suffix]]:
+		if embedded_string(literal(start + int(pair[0]), 1)) != pair[1]:
+			fail("Inconsistent station notice punctuation.")
+			return {}
+	if separator.is_empty() or suffix.is_empty():
+		fail("Missing station notice punctuation.")
+		return {}
+	var credits: Array = []
+	for record in [[0x28a, 0x29a, 0x2a6, -1], [0x2e0, 0x2ee, 0x2f6, 0x2fe], [0x336, 0x344, 0x350, -1]]:
+		var flag := u16(start + int(record[1]))
+		if flag & 0xf800 != 0x7800:
+			fail("Unsupported station credit notice record flag.")
+			return {}
+		var identifier: int = (
+			literal(start + int(record[2]), 1)
+			if record[3] < 0
+			else (
+				immediate_at(start + int(record[2]), 1)
+				<< ((u16(start + int(record[3])) >> 6) & 31)
+			)
+		)
+		credits.append(
+			{
+				"threshold": literal(start + int(record[0]), 2),
+				"text": identifier,
+				"flag": (flag >> 6) & 31
+			}
+		)
+	var exploration: Array = []
+	for record in [[0x3fa, 0x418, -1], [0x454, 0x472, 0x474], [0x4b0, 0x4ce, -1], [0x50a, 0x528, -1], [0x564, 0x57e, -1]]:
+		exploration.append(
+			{
+				"rate": literal_float(start + int(record[0]), 1),
+				"text":
+				(
+					literal(start + int(record[1]), 1)
+					if record[2] < 0
+					else (
+						immediate_at(start + int(record[1]), 1)
+						<< ((u16(start + int(record[2])) >> 6) & 31)
+					)
+				)
+			}
+		)
+	var limit := u16(start + 0x3ec)
+	if limit & 0xff00 != 0x2a00:
+		fail("Unsupported station exploration notice bound.")
+		return {}
+	# The station screen records the compared baseline again as it finishes
+	# loading, so notices describe the change since the previous visit.
+	for pair in [[0xa8e, "__ZN6Status13getReputationEv"], [0xa9e, "__ZN6Status18getExplorationRateEv"]]:
+		if call_target(enter + int(pair[0])) != symbol_address(str(pair[1])):
+			fail("Unsupported station notice baseline association.")
+			return {}
+	var result := {
+		"separator": separator,
+		"suffix": suffix,
+		"level_text": literal(start + 0x8a, 1),
+		"reputation_text": literal(start + 0x1a0, 1),
+		"rank_base": shifted_immediate(start + 0x1d6, 2),
+		"credit_milestones": credits,
+		"exploration_limit": limit & 255,
+		"exploration_milestones": exploration
+	}
+	return result if error.is_empty() else {}
 
 
 func hangar_presentation() -> Dictionary:

@@ -83,6 +83,9 @@ func open(directory: String, content_id: String, language: String = "gb") -> boo
 		and valid_briefing_ui()
 		and valid_title_ui()
 		and valid_station_ui()
+		and preload("res://src/simulation/station_messages.gd").valid_data(
+			content.get("station_messages"), strings.size()
+		)
 		and valid_hangar_ui()
 		and valid_options_ui()
 		and valid_pause_ui()

@@ -372,17 +372,23 @@ static func supported(library, offer: Dictionary) -> bool:
 static func valid_receipts(library, root_seed: int, receipts: Variant, visit: int) -> bool:
 	if not receipts is Array or receipts.size() > 100000:
 		return false
+	# A station rebuilds its board only when the pilot arrives without a mission,
+	# so several receipts can share one visit. They stay ordered by visit and no
+	# offer may be paid twice or come from a board that has not been drawn yet.
 	var previous_visit := -1
+	var seen := {}
 	for receipt in receipts:
 		if not receipt is Dictionary or not Combat.integer(receipt.get("payment")):
 			return false
 		var offer := reference_offer(library, root_seed, receipt.get("reference"))
 		if (
 			not supported(library, offer)
-			or receipt.reference.visit >= visit
-			or receipt.reference.visit <= previous_visit
+			or receipt.reference.visit > visit
+			or receipt.reference.visit < previous_visit
+			or seen.has(reference_key(receipt.reference))
 		):
 			return false
+		seen[reference_key(receipt.reference)] = true
 		if offer.reward_unit == "per_target":
 			if (
 				not library.content.contracts.asteroids.types.any(

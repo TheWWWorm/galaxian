@@ -80,6 +80,8 @@ func run() -> void:
 	await check_trail_mode_boundaries(lib)
 	check_contract_boards(lib)
 	check_contract_sessions(lib)
+	check_station_persistence(lib)
+	check_arrival_notices(lib)
 	await check_economy(lib)
 	check_radio(lib)
 	check_dialogue_modality(lib)
@@ -7186,6 +7188,211 @@ func check_transport_declarations(source: PackedByteArray) -> void:
 		reader.contract_transport().is_empty() and not reader.error.is_empty(),
 		"Changed coordinate write is rejected rather than silently permuting route axes"
 	)
+
+
+func board_contract_fixture(lib):
+	# Accept the first supported offer on a skipped-campaign board.
+	var pilot := Session.new()
+	pilot.configure(lib, true)
+	for seed_value in 1000:
+		pilot.market_seed = seed_value
+		var board := pilot.contract_offers()
+		for index in board.size():
+			if Contracts.supported(lib, board[index]) and pilot.begin_contract(index):
+				return [pilot, index]
+	return []
+
+
+func settle_contract_fixture(pilot) -> void:
+	pilot.active_job.ready = true
+	pilot.active_job.failed = false
+	pilot.active_job.radio.remaining = 0.0
+	pilot.active_job.radio.current = -1
+	for cue in pilot.mission_definition().get("radio", []).size():
+		if not pilot.active_job.radio.shown.has(cue):
+			pilot.active_job.radio.shown.append(cue)
+
+
+func check_station_persistence(lib) -> void:
+	# A station rebuilds its shop and board only when the pilot arrives without
+	# an active mission. Returning from one leaves both exactly as they were.
+	var fixture: Array = board_contract_fixture(lib)
+	check(not fixture.is_empty(), "Accept a supported board contract for station persistence")
+	if fixture.is_empty():
+		return
+	var pilot = fixture[0]
+	var accepted: int = fixture[1]
+	var origin: int = pilot.station_id
+	var generation: int = pilot.market_generation
+	pilot.docked = true
+	var board: Array = pilot.contract_offers().duplicate(true)
+	var stock: Array = pilot.market_offers().duplicate(true)
+	pilot.docked = false
+	settle_contract_fixture(pilot)
+	check(pilot.arrive(origin), "Settle the contract at its origin station")
+	check(
+		pilot.market_generation == generation,
+		"Returning from a mission keeps the station generation"
+	)
+	check(pilot.contract_offers() == board, "The board survives a completed mission")
+	check(pilot.market_offers() == stock, "The shop stock survives a completed mission")
+	check(
+		pilot.contract_paid(pilot.contract_reference(accepted)),
+		"The settled offer is recorded as paid"
+	)
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(1440, 960)
+	root.add_child(viewport)
+	var panel = preload("res://src/presentation/mission_board.gd").new()
+	viewport.add_child(panel)
+	panel.configure(lib, pilot)
+	check(
+		panel.offers.size() == board.size() - 1
+		and not panel.references.any(
+			func(reference): return int(reference.index) == accepted
+		),
+		"The settled offer leaves the board list, as accepting it does in the source"
+	)
+	root.remove_child(viewport)
+	viewport.queue_free()
+	var second := -1
+	for index in board.size():
+		if index != accepted and Contracts.supported(lib, board[index]):
+			second = index
+			break
+	if second >= 0:
+		check(pilot.begin_contract(second), "A second offer from the same board can be accepted")
+		settle_contract_fixture(pilot)
+		check(pilot.arrive(origin), "Settle the second contract of the same visit")
+		check(
+			pilot.contract_rewards.size() == 2,
+			"Two receipts of one visit are both recorded"
+		)
+		check(
+			Contracts.valid_receipts(
+				lib, pilot.market_seed, pilot.contract_rewards, pilot.market_generation
+			),
+			"Receipts that share a visit stay valid"
+		)
+		var reloaded := Session.new()
+		reloaded.configure(lib, true)
+		check(
+			reloaded.restore(JSON.parse_string(JSON.stringify(pilot.capture()))),
+			"Two receipts from one visit reload: " + reloaded.error
+		)
+		var forged: Dictionary = JSON.parse_string(JSON.stringify(pilot.capture()))
+		forged.contract_rewards.append(forged.contract_rewards[0].duplicate(true))
+		var reject := Session.new()
+		reject.configure(lib, true)
+		check(not reject.restore(forged), "A repeated receipt reference is rejected")
+		var ahead: Dictionary = JSON.parse_string(JSON.stringify(pilot.capture()))
+		ahead.contract_rewards[0].reference.visit = int(pilot.market_generation) + 1
+		var future := Session.new()
+		future.configure(lib, true)
+		check(not future.restore(ahead), "A receipt from an undrawn board is rejected")
+	var destination := 0
+	for candidate in lib.stations.size():
+		if candidate != origin:
+			destination = candidate
+			break
+	pilot.credits = 10000000
+	check(pilot.travel(destination), "Travel away from the origin: " + pilot.error)
+	check(pilot.market_generation == generation + 1, "Travel advances the station generation")
+	pilot.credits = 10000000
+	check(pilot.travel(origin), "Travel back to the origin: " + pilot.error)
+	check(pilot.market_generation == generation + 2, "Arriving again advances it once more")
+	check(pilot.contract_offers() != board, "A fresh visit draws a new board")
+
+
+func check_arrival_notices(lib) -> void:
+	# Station arrival notices: the source compares the pilot record against the
+	# values recorded when the station screen was last entered.
+	var data: Dictionary = lib.content.station_messages
+	check(
+		lib.text(int(data.reputation_text)).length() > 0
+		and lib.text(int(data.rank_base)).length() > 0,
+		"Arrival notices resolve imported localization"
+	)
+	var pilot := Session.new()
+	pilot.configure(lib, true)
+	check(pilot.arrival_notices.is_empty(), "A new pilot has no arrival notices")
+	var threshold := int(lib.content.station_ui.status.reputation_thresholds[0])
+	pilot.statistics.kills = threshold
+	pilot.docked = false
+	check(pilot.arrive(pilot.station_id), "Dock after crossing the first reputation threshold")
+	check(
+		pilot.arrival_notices.size() == 1
+		and (
+			pilot.arrival_notices[0]
+			== (
+				lib.text(int(data.reputation_text))
+				+ str(data.separator)
+				+ lib.text(int(data.rank_base) + 1)
+				+ str(data.suffix)
+			)
+		),
+		"Reputation notice joins the source text, rank name and suffix"
+	)
+	pilot.acknowledge_notice()
+	pilot.docked = false
+	check(pilot.arrive(pilot.station_id), "Dock again without further kills")
+	check(pilot.arrival_notices.is_empty(), "A reputation notice is not repeated")
+	pilot.credits = int(lib.content.station_messages.credit_milestones[2].threshold) + 1
+	pilot.docked = false
+	pilot.arrive(pilot.station_id)
+	check(
+		pilot.arrival_notices.size() == 1
+		and pilot.arrival_notices[0] == lib.text(int(data.credit_milestones[2].text)),
+		"Crossing a credit milestone announces its imported text"
+	)
+	pilot.arrival_notices = []
+	pilot.credits = int(data.credit_milestones[2].threshold) - 1
+	pilot.docked = false
+	pilot.arrive(pilot.station_id)
+	pilot.credits = int(data.credit_milestones[2].threshold) + 1
+	pilot.docked = false
+	pilot.arrive(pilot.station_id)
+	check(pilot.arrival_notices.is_empty(), "A credit milestone is announced once per pilot")
+	var goal := int(lib.stations.size() / 10)
+	for index in range(pilot.visited.size(), goal):
+		pilot.visited.append(index)
+	pilot.docked = false
+	pilot.arrive(pilot.station_id)
+	check(
+		pilot.arrival_notices.size() == 1
+		and pilot.arrival_notices[0] == lib.text(int(data.exploration_milestones[4].text)),
+		"Ten percent exploration announces the lowest matching milestone"
+	)
+	pilot.arrival_notices = []
+	var advanced := Session.new()
+	advanced.configure(lib, true)
+	advanced.statistics.kills = threshold * 100
+	advanced.credits = int(data.credit_milestones[0].threshold) * 2
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(advanced.capture()))
+	var reloaded := Session.new()
+	reloaded.configure(lib, true)
+	check(reloaded.restore(saved), "Restore an advanced pilot: " + reloaded.error)
+	reloaded.docked = false
+	reloaded.arrive(reloaded.station_id)
+	check(
+		reloaded.arrival_notices.is_empty(),
+		"Loading records the baseline again instead of replaying notices"
+	)
+	var legacy: Dictionary = JSON.parse_string(JSON.stringify(advanced.capture()))
+	legacy.schema = 29
+	legacy.erase("credit_notices")
+	var migrated := Session.new()
+	migrated.configure(lib, true)
+	check(migrated.restore(legacy), "Migrate a save without a notice record: " + migrated.error)
+	check(
+		migrated.credit_notices.size() == data.credit_milestones.size(),
+		"Migration marks the credit milestones the pilot already passed"
+	)
+	var broken: Dictionary = JSON.parse_string(JSON.stringify(advanced.capture()))
+	broken.credit_notices = [int(data.credit_milestones[0].flag), int(data.credit_milestones[0].flag)]
+	var refused := Session.new()
+	refused.configure(lib, true)
+	check(not refused.restore(broken), "A repeated notice flag is rejected")
 
 
 func check_contract_sessions(lib) -> void:
@@ -19824,11 +20031,12 @@ func check_menu_scene_main(lib) -> void:
 	app.show_options()
 	check(
 		(
-			previous.is_queued_for_deletion()
-			and not previous.visible
-			and not previous.flare_layer.visible
+			app.menu_scene == previous
+			and not previous.is_queued_for_deletion()
+			and previous.visible
+			and previous.flare_layer.visible
 		),
-		"Leaving title stops old scene and flare layer immediately"
+		"Options keeps the running title scene instead of restarting it"
 	)
 	check(
 		app.menu_scene != null and app.menu_scene.scene_mode == 4,
@@ -19851,6 +20059,15 @@ func check_menu_scene_main(lib) -> void:
 			and app.menu_scene.ships.back().role == "player"
 		),
 		"Campaign dock selects orbital scene and current pilot hull"
+	)
+	check(
+		(
+			app.menu_scene != previous
+			and previous.is_queued_for_deletion()
+			and not previous.visible
+			and not previous.flare_layer.visible
+		),
+		"Replacing the scenery stops the old scene and flare layer immediately"
 	)
 	app.menu_scene.set_process(false)
 	app.menu_scene.advance(2)
@@ -19986,7 +20203,7 @@ func check_title_menu(source: PackedByteArray, lib) -> void:
 	var previous_scene = app.menu_scene
 	panel.buttons[0].pressed.emit()
 	check(
-		panel.section == "start" and panel.buttons.size() == 3 and app.menu_scene == previous_scene,
+		panel.section == "start" and panel.buttons.size() == 4 and app.menu_scene == previous_scene,
 		"Start submenu preserves ambient scene"
 	)
 	for index in 3:
@@ -20035,20 +20252,35 @@ func check_title_menu(source: PackedByteArray, lib) -> void:
 	app.show_title_menu("help")
 	var help: ScrollContainer = panel.canvas.get_child(1)
 	await process_frame
+	var help_label: Label = null
+	for child in help.get_children():
+		if child is Label:
+			help_label = child
 	check(
-		help.get_child(0).text == app.controls_help() and help.get_child(0).size.y > help.size.y,
+		help_label != null
+		and help_label.text == app.controls_help()
+		and help_label.size.y > help.size.y,
 		"Shared remake controls remain scrollable in original frame"
 	)
 	panel.footer.pressed.emit()
+	var ambient = app.menu_scene
 	panel.buttons[2].pressed.emit()
 	check(
 		app.screen == "options" and app.title_panel == null and not panel.visible,
 		"Options removes title input immediately"
 	)
+	check(
+		app.menu_scene == ambient and is_instance_valid(app.menu_scene),
+		"Options keeps the running title scenery instead of restarting it"
+	)
 	app.close_options()
 	check(
 		app.screen == "title" and app.title_panel.section == "main",
 		"Options returns to original title"
+	)
+	check(
+		app.menu_scene == ambient and is_instance_valid(app.menu_scene),
+		"Returning from options keeps the same ambient scene"
 	)
 	app.free()
 	viewport.free()
@@ -22622,6 +22854,15 @@ func check_checkpoint_visibility(lib) -> void:
 		"Settlement still awards exactly once"
 	)
 	app.acknowledge_recovery()
+	check(
+		app.screen == "arrival" and pilot.arrival_notices.size() == 1,
+		"The contract rank gain is announced before the station screen"
+	)
+	check(
+		app.status.is_visible_in_tree() and app.status.text.contains("Could not write"),
+		"Mission save error remains visible on the arrival notice"
+	)
+	app.acknowledge_arrival_notice()
 	check(
 		app.screen == "dock" and app.station_panel.section == "notice",
 		"Acknowledging loot keeps save failure visible at dock"
