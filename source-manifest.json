@@ -277,6 +277,8 @@
     "game/tests/swarm_flight.gd.uid",
     "game/tests/swarm_pressure.gd",
     "game/tests/swarm_pressure.gd.uid",
+    "game/tests/text_font.gd",
+    "game/tests/text_font.gd.uid",
     "game/tests/touch_hud.gd",
     "game/tests/touch_hud.gd.uid",
     "game/tests/web_display.gd",

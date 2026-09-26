@@ -8,6 +8,7 @@ const BriefingScene = preload("res://src/presentation/briefing_scene.gd")
 const RecoveryPanel = preload("res://src/presentation/recovery.gd")
 const Dialogue = preload("res://src/presentation/dialogue.gd")
 const HUD = preload("res://src/presentation/hud.gd")
+const BitmapFont = preload("res://src/presentation/bitmap_font.gd")
 const DisplaySettings = preload("res://src/presentation/display_settings.gd")
 const TouchLayout = preload("res://src/presentation/touch_layout.gd")
 const GalaxyMap = preload("res://src/presentation/galaxy_map.gd")
@@ -97,7 +98,8 @@ var settings := {
 	"touch_layout": {},
 	"fullscreen": false,
 	"aspect_ratio": "auto",
-	"frame_rate": "auto"
+	"frame_rate": "auto",
+	"text_font": "auto"
 }
 var notification_text := ""
 var notification_time := 0.0
@@ -2066,6 +2068,7 @@ func change_option(key: String, value: Variant) -> void:
 		if is_instance_valid(options_panel):
 			options_panel.values.language = value
 			options_panel.show_section(options_panel.section, "language")
+		refresh_text_font("language")
 	elif key == "fullscreen" and value is bool:
 		DisplaySettings.set_fullscreen(get_window(), value)
 		settings.fullscreen = value
@@ -2077,6 +2080,10 @@ func change_option(key: String, value: Variant) -> void:
 	elif key == "frame_rate" and DisplaySettings.FRAME_RATES.has(value):
 		settings.frame_rate = DisplaySettings.frame_rate_value(value)
 		DisplaySettings.apply_frame_rate(get_window(), settings.frame_rate)
+	elif key == "text_font" and BitmapFont.TEXT_FONTS.has(value):
+		settings.text_font = value
+		BitmapFont.text_font = value
+		refresh_text_font("text_font")
 	elif key in ["music_volume", "effects_volume", "sensitivity", "motion_sensitivity"]:
 		if not value is float and not value is int: return
 		if not is_finite(float(value)): return
@@ -2088,6 +2095,20 @@ func change_option(key: String, value: Variant) -> void:
 	else:
 		return
 	save_settings()
+
+
+func refresh_text_font(focus_key: String) -> void:
+	# Screens keep the font they were built with; rebuild the open ones when
+	# the text font or a language needing it changes which font is used.
+	if not ready_content or not BitmapFont.is_mobile():
+		return
+	var font := BitmapFont.create(library)
+	if is_instance_valid(hud):
+		hud.apply_text_font()
+	if screen == "options" and is_instance_valid(options_panel) and options_panel.font != font:
+		var section: String = options_panel.section
+		show_options()
+		options_panel.show_section(section, focus_key)
 
 
 func apply_audio_settings() -> void:
@@ -2120,6 +2141,8 @@ func load_settings() -> void:
 	for key in ["music_volume", "effects_volume", "motion_sensitivity"]:
 		var value: Variant = settings[key]
 		settings[key] = clampf(float(value), 0, 1) if (value is float or value is int) and is_finite(float(value)) else 1.0
+	settings.text_font = BitmapFont.text_font_value(settings.text_font)
+	BitmapFont.text_font = settings.text_font
 
 
 func play_menu_music(title_context: bool) -> void:

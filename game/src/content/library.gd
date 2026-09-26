@@ -31,6 +31,7 @@ var error := ""
 var radio_atlases := {}
 var radio_lines_cache := {}
 var bitmap_fonts := {}
+var scalable_text_cache := -1
 var contract_names := {}
 var sound_cache := {}
 var player_profile_cache := {}
@@ -49,6 +50,7 @@ func open(directory: String, content_id: String, language: String = "gb") -> boo
 	radio_atlases.clear()
 	radio_lines_cache.clear()
 	bitmap_fonts.clear()
+	scalable_text_cache = -1
 	contract_names.clear()
 	sound_cache.clear()
 	player_profile_cache.clear()
@@ -135,7 +137,7 @@ func available_languages() -> Array[String]:
 
 static func language_name(code: String) -> String:
 	return {"gb": "English", "de": "Deutsch", "es": "Español",
-		"fr": "Français", "it": "Italiano"}.get(code, code.to_upper())
+		"fr": "Français", "it": "Italiano", "ru": "Русский"}.get(code, code.to_upper())
 
 
 func set_language(code: String) -> bool:
@@ -149,6 +151,7 @@ func set_language(code: String) -> bool:
 	strings = localized
 	language_code = code
 	radio_lines_cache.clear()
+	scalable_text_cache = -1
 	error = ""
 	return true
 
@@ -1897,6 +1900,24 @@ func radio_glyph_width(code: int) -> float:
 	if not glyphs.has(code):
 		code = 63  # Visible fallback for unsupported glyphs.
 	return maxf(1, glyphs[code].size.x + int(content.radio_ui.font_spacing))
+
+
+func needs_scalable_text() -> bool:
+	# A language written in letters the imported glyph atlas lacks (Cyrillic,
+	# for example) cannot use it. A stray missing symbol falls back to "?".
+	if scalable_text_cache < 0:
+		scalable_text_cache = 0
+		var glyphs := radio_glyphs()
+		for value in strings:
+			for index in value.length():
+				var code := value.unicode_at(index)
+				if glyphs.has(code) or code < 128:
+					continue
+				var character := String.chr(code)
+				if character.to_upper() != character.to_lower() or code >= 0x2E80:
+					scalable_text_cache = 1
+					return true
+	return scalable_text_cache == 1
 
 
 func radio_lines(cue: Dictionary) -> PackedStringArray:

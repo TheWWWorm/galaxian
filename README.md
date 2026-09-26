@@ -111,6 +111,8 @@ loss and active-controller disconnect pause the game.
 Options includes sensitivity, inversion, aim assistance, touch controls, linked
 primary firing and separate music/effects volume. Select **Options → Language**
 to cycle through the languages included in your IPA; your choice is saved.
+An IPA carrying an added translation, such as a community Russian `ru.lang`, is
+offered too.
 Remake-specific settings and help currently use English. Inversion reverses pitch
 on the Y axis for mouse, controller and touch. Arrow keys keep their direction.
 The previous remake flight controls are the default. Enable **Options → Controls →
@@ -167,6 +169,11 @@ refresh rate of the screen the window is on, and **Unlimited** leaves only
 vertical sync. Flight renders smoothly at any of these: the simulation keeps its
 fixed step and the picture is blended between steps.
 
+On phones and tablets, **Options → Display → Text font** chooses between the
+original bitmap lettering and scalable text. **Auto** keeps the original lettering
+unless the selected language uses letters it does not contain, such as Cyrillic;
+**Original** and **Scalable** force either one. Desktop text is always scalable.
+
 ## Saves and updates
 
 Each IPA has a separate content identity, cache and saves. Campaign, exploration
@@ -174,7 +181,7 @@ Survival and Swarm use separate slots. Checkpoint writes preserve a `.bak` recov
 failed writes are reported without replacing the last valid save. Previous preview
 pilots remain compatible. Old imported caches may require choosing the IPA again;
 1.0.18 reads weapon and radio sound selections from the archive, so a cache from
-an earlier version asks for the IPA once. Saves are kept.
+a version before 1.0.18 asks for the IPA once. Saves are kept.
 
 **Load / recover** in Pause, or **Load** after defeat, lets you choose the latest
 autosave, the mission/flight start, or the last station. Earlier checkpoints restore

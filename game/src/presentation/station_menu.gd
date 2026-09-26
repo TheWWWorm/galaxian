@@ -269,7 +269,7 @@ func tab_enabled(index: int) -> bool:
 
 
 func layout_tabs() -> void:
-	if preload("res://src/presentation/bitmap_font.gd").is_mobile() or tabs.is_empty():
+	if not preload("res://src/presentation/bitmap_font.gd").scalable_text(library) or tabs.is_empty():
 		return
 	# Native font line height must not add to the original bitmap padding.
 	# Divide the panel extent, rather than accumulating sprite widths.

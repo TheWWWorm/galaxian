@@ -3,12 +3,16 @@ extends RefCounted
 
 
 static var desktop_fonts := {}
+## Mobile text font: "auto" keeps the imported glyphs unless the active language
+## has letters the imported atlas lacks; "original" and "scalable" force a choice.
+static var text_font := "auto"
+const TEXT_FONTS := ["auto", "original", "scalable"]
 
 
 static func create(library) -> FontFile:
 	var glyphs: Dictionary = library.radio_glyphs()
 	var height: int = glyphs.values()[0].size.y
-	if not is_mobile():
+	if scalable_text(library):
 		if not desktop_fonts.has(height):
 			var vector_font := ThemeDB.fallback_font.duplicate() as FontFile
 			vector_font.set_meta("source_height", height)
@@ -52,7 +56,7 @@ static func draw_text(
 ) -> void:
 	var glyphs: Dictionary = library.radio_glyphs()
 	var height: int = glyphs.values()[0].size.y
-	if not is_mobile():
+	if scalable_text(library):
 		var font := ThemeDB.fallback_font
 		# Keep authored line breaks, using a vector font at the source text size.
 		canvas.draw_string(
@@ -79,7 +83,7 @@ static func draw_text(
 
 
 static func text_width(library, text: String) -> float:
-	if not is_mobile():
+	if scalable_text(library):
 		var height: int = library.radio_glyphs().values()[0].size.y
 		return ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, height).x
 	var width := 0.0
@@ -89,7 +93,7 @@ static func text_width(library, text: String) -> float:
 
 
 static func wrap_lines(library, text: String, width: float) -> PackedStringArray:
-	if is_mobile():
+	if not scalable_text(library):
 		return library.bitmap_lines(text, width)
 	var lines := PackedStringArray()
 	for paragraph in text.split("\n"):
@@ -108,6 +112,16 @@ static func wrap_lines(library, text: String, width: float) -> PackedStringArray
 				line += character
 		lines.append(line)
 	return lines
+
+
+static func scalable_text(library) -> bool:
+	if not is_mobile() or text_font == "scalable":
+		return true
+	return text_font == "auto" and library.needs_scalable_text()
+
+
+static func text_font_value(value) -> String:
+	return value if value is String and TEXT_FONTS.has(value) else "auto"
 
 
 static var mobile_cache := -1

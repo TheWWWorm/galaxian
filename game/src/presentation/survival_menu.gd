@@ -166,7 +166,7 @@ func make_table() -> void:
 		))
 	var text_size := int(font.get_meta("source_height"))
 	table_divider_y = height + layout.line_base
-	if not BitmapFont.is_mobile():
+	if BitmapFont.scalable_text(library):
 		# Native fonts have different ascent and line spacing. Fit the complete
 		# imported leaderboard inside its frame, including a separate header rule.
 		var bottom: float = declarations.frame[1] + declarations.frame[3] - 10
@@ -238,7 +238,7 @@ func layout_canvas() -> void:
 	for index in tabs.size():
 		tabs[index].position = Vector2(frame[0] + index * (tab_size.x - 1), frame[1])
 		tabs[index].size = tab_size
-		if not preload("res://src/presentation/bitmap_font.gd").is_mobile():
+		if BitmapFont.scalable_text(library):
 			tabs[index].position.x = frame[0] + float(frame[2]) * index / tabs.size()
 			tabs[index].size.x = float(frame[2]) / tabs.size()
 	var layout: Dictionary = library.content.briefing_ui.footer
@@ -326,7 +326,7 @@ func _draw() -> void:
 		if tabs[index].has_focus() and index != active_tab:
 			draw_rect(Rect2(tabs[index].position, tabs[index].size), ink, false)
 		var caption_y: float = shape.caption_y
-		if not preload("res://src/presentation/bitmap_font.gd").is_mobile():
+		if BitmapFont.scalable_text(library):
 			var text_size := int(font.get_meta("source_height"))
 			caption_y = (tabs[index].size.y - font.get_height(text_size)) * .5 + font.get_ascent(text_size) - text_size
 		draw_text(

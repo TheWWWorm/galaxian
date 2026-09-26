@@ -288,7 +288,7 @@ func make_button(text: String, action: String, idle: Texture2D, selected: Textur
 		style.content_margin_right = 0
 		style.content_margin_top = float(data.text_y)
 		style.content_margin_bottom = maxf(0, idle.get_height() - data.text_y - int(font.get_meta("source_height")))
-		if not preload("res://src/presentation/bitmap_font.gd").is_mobile():
+		if preload("res://src/presentation/bitmap_font.gd").scalable_text(library):
 			style.content_margin_top = 0
 			style.content_margin_bottom = 0
 		result.add_theme_stylebox_override(state, style)

@@ -36,7 +36,7 @@ func label_for(key: String) -> String:
 		"aim_assist": "Aim assistance", "linked_fire": "Fire linked weapons",
 		"touch": "Show touch controls", "sensitivity": "Mouse sensitivity",
 		"language": "Language", "fullscreen": "Fullscreen", "aspect_ratio": "Aspect ratio",
-		"frame_rate": "Frame rate limit",
+		"frame_rate": "Frame rate limit", "text_font": "Text font",
 		"flight_overlays": "Show flight text overlays", "extra_flight_buttons": "Show extra flight buttons",
 		"flight_hud": "Flight display",
 		"original_flight_controls": "Original flight controls",
@@ -58,11 +58,14 @@ func show_section(page: String, focus_key: String = "") -> void:
 		"motion": ["motion_steering", "motion_sensitivity", "calibrate_motion"],
 		"weapons": ["aim_assist", "linked_fire"],
 		"audio": ["effects_volume", "music_volume"],
-		"display": ["fullscreen", "aspect_ratio", "frame_rate", "flight_hud"],
+		"display": ["fullscreen", "aspect_ratio", "frame_rate", "text_font", "flight_hud"],
 		"flight_hud": ["targeting_reticle", "touch", "flight_overlays", "extra_flight_buttons"], "help": []
 	}.get(page, [])
 	if preload("res://src/presentation/bitmap_font.gd").is_mobile():
 		keys.erase("fullscreen")
+	else:
+		# Desktop text is always drawn with the scalable font.
+		keys.erase("text_font")
 	for key in keys:
 		var caption_key: String = {"music_volume": "music", "effects_volume": "effects"}.get(key, key)
 		var caption := label_for(caption_key)
@@ -73,6 +76,9 @@ func show_section(page: String, focus_key: String = "") -> void:
 			caption += ": " + ("Auto" if ratio == "auto" else ratio)
 		if key == "frame_rate":
 			caption += ": " + preload("res://src/presentation/display_settings.gd").frame_rate_caption(get_window(), values.get(key, "auto"))
+		if key == "text_font":
+			var mode := preload("res://src/presentation/bitmap_font.gd").text_font_value(values.get(key))
+			caption += ": " + {"auto": "Auto", "original": "Original", "scalable": "Scalable"}[mode]
 		entries.append({"action": key, "text": caption})
 	present(page, entries, library.text(int(library.content.briefing_ui.labels.back)), "back", help_text if page == "help" else "")
 	# Original sliders are taller than ordinary rows. Native extra settings must
@@ -225,6 +231,12 @@ func handle_action(action: String) -> void:
 		values[action] = rates[(rates.find(Display.frame_rate_value(values.get(action, "auto"))) + 1) % rates.size()]
 		setting_changed.emit(action, values[action])
 		show_section(section, action)
+	elif action == "text_font":
+		var fonts: Array = preload("res://src/presentation/bitmap_font.gd").TEXT_FONTS
+		values[action] = fonts[(fonts.find(values.get(action, "auto")) + 1) % fonts.size()]
+		setting_changed.emit(action, values[action])
+		if not is_queued_for_deletion():  # A font change rebuilds the menu.
+			show_section(section, action)
 	elif values.get(action) is bool:
 		values[action] = not values[action]
 		setting_changed.emit(action, values[action])

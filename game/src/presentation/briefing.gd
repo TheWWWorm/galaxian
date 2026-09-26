@@ -122,7 +122,7 @@ func bitmap_width(text: String) -> float:
 
 func text_metrics() -> Vector2:
 	var source_height: int = library.radio_glyphs().values()[0].size.y
-	if preload("res://src/presentation/bitmap_font.gd").is_mobile():
+	if not preload("res://src/presentation/bitmap_font.gd").scalable_text(library):
 		return Vector2(source_height, 0)
 	var font := ThemeDB.fallback_font
 	# draw_text adds the source glyph height to its supplied baseline origin.

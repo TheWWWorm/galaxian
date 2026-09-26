@@ -336,7 +336,7 @@ func setup_artwork() -> void:
 	autofire_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	autofire_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	autofire_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	autofire_label.add_theme_font_override("font", preload("res://src/presentation/bitmap_font.gd").create(flight.library))
+	apply_text_font()
 	autofire_label.add_theme_color_override("font_color", Color.WHITE)
 	autofire_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	autofire_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -938,3 +938,9 @@ func centered_bitmap(text: String, width: float, y: float) -> void:
 	for index in text.length():
 		measured += flight.library.radio_glyph_width(text.unicode_at(index))
 	bitmap(text, Vector2((width - measured) * .5, y))
+
+
+func apply_text_font() -> void:
+	if flight == null:
+		return
+	autofire_label.add_theme_font_override("font", preload("res://src/presentation/bitmap_font.gd").create(flight.library))
