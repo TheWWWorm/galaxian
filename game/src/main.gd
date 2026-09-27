@@ -1218,6 +1218,7 @@ func resume_after_cards() -> void:
 	paused = false
 	show_flight_hud()
 	if is_instance_valid(flight):
+		flight.refresh_player_hull()
 		flight.pause(false)
 
 

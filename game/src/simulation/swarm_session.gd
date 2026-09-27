@@ -132,13 +132,7 @@ func repair_amounts() -> Array:
 func grant_initial_weapon() -> void:
 	## The run opens on the cheapest weapon the chosen hull can mount, taken
 	## straight from the catalogue ladder.
-	var available := Build.categories(library, int(build.ship))
-	var ladders := Build.ladders(library)
-	for category in available:
-		if ladders.get(category, []).is_empty():
-			continue
-		build.tier[category] = 1
-		return
+	Build.ensure_gun(build, library)
 
 
 func grant_initial_shield() -> void:
@@ -267,6 +261,16 @@ func rebuild_player_guns() -> void:
 	player_guns = Build.guns(build, rules, library, range(arena.groups.size()))
 	for id in player_guns:
 		remember_profile(player_guns[id], previous.get(id, player_guns[id]))
+	# Shots and cooldowns of a gun the build no longer carries (a refit or a
+	# hull transfer) have no profile left to fly or save against.
+	combat.projectiles = combat.projectiles.filter(
+		func(shot): return int(shot.weapon) < 0 or player_guns.has(int(shot.weapon))
+	)
+	for key in combat.cooldowns.keys():
+		if int(key) >= 0 and not player_guns.has(int(key)):
+			combat.cooldowns.erase(key)
+	# A hull transfer changes the flown ship, not only the build's numbers.
+	ship_id = int(build.ship)
 	loadout.build = build
 	loadout.refresh()
 	if not loadout.primary_weapons().has(weapon_id):
@@ -602,6 +606,8 @@ func valid_snapshot_header(value: Variant) -> bool:
 
 func apply_snapshot(value: Dictionary) -> bool:
 	build = Build.normalize(value.build)
+	# Saves from before transfers kept a gun could hold a build with none.
+	Build.ensure_gun(build, library)
 	rebuild_player_guns()
 	if int(value.weapon_id) >= 0 and not loadout.weapons().has(int(value.weapon_id)):
 		return false
@@ -671,7 +677,8 @@ func apply_snapshot(value: Dictionary) -> bool:
 	active_job.kills = int(value.kills)
 	active_job.elapsed_ms = float(value.mission_elapsed_ms)
 	unlocked_hulls = value.hulls.duplicate()
-	weapon_id = int(value.weapon_id)
+	if int(value.weapon_id) >= 0 or loadout.primary_weapons().is_empty():
+		weapon_id = int(value.weapon_id)
 	hull = float(value.hull)
 	shield = float(value.shield)
 	elapsed = float(value.elapsed)

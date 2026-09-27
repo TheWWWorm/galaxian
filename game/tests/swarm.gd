@@ -160,6 +160,23 @@ func run() -> void:
 	var wording := Cards.captions(sample, rules, lib, session.build, session.repair_amounts())
 	check(wording.size() == sample.size() + 1, "decline option appended")
 
+	# a hull transfer always leaves a gun and flies the new hull
+	for from in hulls:
+		for to in hulls:
+			if from == to:
+				continue
+			var moved = Session.new()
+			moved.configure_swarm(lib, rules, 0, from, hulls, 99)
+			moved.director.pending = 1
+			check(moved.choose_card({"kind": "hull", "category": -1, "item": to}), "transfer %d->%d" % [from, to])
+			check(moved.ship_id == to, "transfer %d->%d flies the new hull" % [from, to])
+			check(
+				moved.weapon_id >= 0
+				and not moved.player_guns.is_empty()
+				and int(lib.items[moved.weapon_id][1]) != lib.MISSILE_CATEGORY,
+				"transfer %d->%d keeps a gun" % [from, to]
+			)
+
 	# the cards that replaced salvage pickups
 	var fresh = Session.new()
 	check(fresh.configure_swarm(lib, rules, 0, 0, hulls, 4242), "recovery session: " + fresh.error)

@@ -144,6 +144,43 @@ func run():
 	flight.fire()
 	check(app.session.combat.projectiles.size() >= before, "player weapons fire")
 
+	# a hull transfer to a ship sharing no gun line swaps the model and still fires
+	var starting := int(app.session.ship_id)
+	var owned: Array = preload("res://src/simulation/swarm_build.gd").owned(app.session.build, lib)
+	# Narrow the build to one line, as a run that has not branched out yet.
+	app.session.build.tier = {int(owned[0]): 1}
+	app.session.rebuild_player_guns()
+	owned = [owned[0]]
+	var target_hull := -1
+	for id in lib.ships.size():
+		var mounts: Array = preload("res://src/simulation/swarm_build.gd").categories(lib, id)
+		if id != starting and not owned.any(func(category): return mounts.has(category)):
+			target_hull = id
+			break
+	if target_hull >= 0 and app.screen == "flight":
+		# Card draws only offer unlocked hulls; saves hold the run to that list.
+		if not app.session.unlocked_hulls.has(target_hull):
+			app.session.unlocked_hulls.append(target_hull)
+		app.session.director.pending = 1
+		app.screen = "swarm_cards"
+		app.swarm_cards = [{"kind": "hull", "category": -1, "item": target_hull}]
+		app.take_swarm_card(0)
+		check(app.screen == "flight", "flight resumes after the transfer, got " + app.screen)
+		check(app.session.ship_id == target_hull, "session flies the transferred hull")
+		check(flight.player_ship_id == target_hull, "flight shows the transferred hull")
+		check(app.session.weapon_id >= 0, "transferred hull keeps a gun")
+		before = app.session.combat.projectiles.size()
+		app.session.combat.cooldowns.clear()
+		flight.fire()
+		check(app.session.combat.projectiles.size() > before, "transferred hull fires")
+		flight.step(1.0 / 30.0)
+		var reloaded = app.session.get_script().new()
+		reloaded.configure_swarm(lib, app.session.rules, 0, starting, app.session.unlocked_hulls, 1)
+		check(reloaded.restore(app.session.capture()), "transferred run saves and restores: " + reloaded.error)
+		check(reloaded.ship_id == target_hull, "restored run flies the transferred hull")
+	else:
+		print("no disjoint hull to transfer to from %d" % starting)
+
 	# defeat path
 	app.session.hull = 0.0
 	flight.step(1.0 / 30.0)

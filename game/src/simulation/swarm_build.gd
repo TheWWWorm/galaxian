@@ -378,6 +378,7 @@ static func apply(state: Dictionary, rules: Dictionary, library, card: Dictionar
 			state.ship = target
 			state.hull_offered = int(state.level)
 			drop_unsupported(state, library)
+			ensure_gun(state, library)
 		_:
 			return false
 	return true
@@ -390,6 +391,23 @@ static func drop_unsupported(state: Dictionary, library) -> void:
 	for category in state.tier.keys():
 		if not supported.has(int(category)):
 			state.tier.erase(category)
+
+
+static func ensure_gun(state: Dictionary, library) -> void:
+	## A build always carries a gun. When the hull cannot mount any line the run
+	## owns, it takes the cheapest weapon of its first gun category, exactly as a
+	## run opens; missiles alone do not count because they have no primary fire.
+	var ladders := ladders(library)
+	var available := categories(library, int(state.ship)).filter(
+		func(category): return not ladders.get(category, []).is_empty()
+	)
+	var guns := available.filter(func(category): return category != library.MISSILE_CATEGORY)
+	for category in guns:
+		if tier(state, category) > 0:
+			return
+	var pick: Array = guns if not guns.is_empty() else available
+	if not pick.is_empty() and tier(state, int(pick[0])) <= 0:
+		state.tier[int(pick[0])] = 1
 
 
 static func valid(state: Variant, rules: Dictionary, library) -> bool:

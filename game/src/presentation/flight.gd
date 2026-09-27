@@ -25,6 +25,8 @@ var flight_effects := FlightEffects.new()
 var boost_audio := preload("res://src/presentation/audio_settings.gd").effect_player()
 var player_burner := preload("res://src/presentation/npc_exhaust.gd").new()
 var player_hull: MeshInstance3D
+var player_ship_id := -1
+var player_collider := CollisionShape3D.new()
 var camera := Camera3D.new()
 var station
 var dock_radius := 0.0
@@ -119,16 +121,8 @@ func setup(data, state, options: Dictionary, resume: bool = false) -> void:
 	ship.collision_layer = 0
 	ship.collision_mask = 0
 	add_child(ship)
-	var hull: MeshInstance3D = library.model(library.ship_model(session.ship_id))
-	ship.add_child(hull)
-	player_hull = hull
-	player_hull_rest = hull.basis
-	update_player_bank()
-	library.attach_ship_exhaust(
-		hull, int(library.content.tables.buyable_ships[session.ship_id]), true
-	)
 	add_child(player_burner)
-	player_burner.configure(library.content.npc_exhaust, hull)
+	build_player_hull()
 	if boosting():
 		player_burner.advance_active(boost_elapsed(), true)
 	update_player_exhaust(speed)
@@ -219,17 +213,47 @@ func build_station_area() -> void:
 		field_rocks.append({"node": ambience.get_child(index), "state": scenery.rocks[index]})
 	station.set_elapsed(session.elapsed * 1000.0)
 	station.enable_collision()
+	ship.add_child(player_collider)
+	ship.collision_mask = 1
+	fit_player_collider()
+
+
+func build_player_hull() -> void:
+	## The flown hull's model and exhaust. Rebuilt in place when a swarm run
+	## transfers to another hull mid-flight.
+	if is_instance_valid(player_hull):
+		player_hull.free()
+	player_burner.nozzles.clear()
+	player_ship_id = session.ship_id
+	var hull: MeshInstance3D = library.model(library.ship_model(session.ship_id))
+	ship.add_child(hull)
+	player_hull = hull
+	player_hull_rest = hull.basis
+	update_player_bank()
+	library.attach_ship_exhaust(
+		hull, int(library.content.tables.buyable_ships[session.ship_id]), true
+	)
+	player_burner.configure(library.content.npc_exhaust, hull)
+
+
+func fit_player_collider() -> void:
 	var player_radius: float = library.actor_radius(
 		int(library.content.tables.buyable_ships[session.ship_id])
 	)
 	var shape := SphereShape3D.new()
 	shape.radius = player_radius
-	var collider := CollisionShape3D.new()
-	collider.shape = shape
-	ship.add_child(collider)
-	ship.collision_mask = 1
+	player_collider.shape = shape
 	# Native docking access outside the whole rotating mesh, including player clearance.
-	dock_radius = station.outer_radius() + player_radius * 2.0
+	if is_instance_valid(station):
+		dock_radius = station.outer_radius() + player_radius * 2.0
+
+
+func refresh_player_hull() -> void:
+	if session == null or session.ship_id == player_ship_id or player_destroyed:
+		return
+	build_player_hull()
+	fit_player_collider()
+	update_player_exhaust(speed)
 
 
 func _ready() -> void:
