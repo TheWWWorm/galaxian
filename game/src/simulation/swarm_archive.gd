@@ -27,13 +27,13 @@ var recovered := ""
 
 func open(data, parameters: Dictionary, directory: String) -> bool:
 	if directory.get_file() != data.id:
-		error = "Swarm records require their own game-content directory."
+		error = tr("Swarm records require their own game-content directory.")
 		return false
 	if not Session.valid_declarations(data, parameters):
-		error = "Unsupported swarm rules for this installation."
+		error = tr("Unsupported swarm rules for this installation.")
 		return false
 	if not ranks(data).size() > 0:
-		error = "This installation has no arcade rank table."
+		error = tr("This installation has no arcade rank table.")
 		return false
 	var records := Profile.new()
 	if not records.configure(data.id, data.content.survival.scores, data.ships.size()):
@@ -160,10 +160,10 @@ func read_checkpoint() -> bool:
 		session = null
 		receipt = board.receipt
 		committed_json = JSON.stringify(capture())
-		recovered = "An unfinished Swarm run could not be continued under the current rules. Your records were kept."
+		recovered = tr("An unfinished Swarm run could not be continued under the current rules. Your records were kept.")
 		error = ""
 		return true
-	error = "No valid swarm checkpoint was found. Existing records were preserved."
+	error = tr("No valid swarm checkpoint was found. Existing records were preserved.")
 	return false
 
 
@@ -278,15 +278,15 @@ func valid_receipt(value: Dictionary, records) -> bool:
 
 func start(origin: int, ship_id: int, seed_value: int) -> bool:
 	if profile == null or session != null or not receipt.is_empty():
-		error = "Resume or close the current swarm run before starting another."
+		error = tr("Resume or close the current swarm run before starting another.")
 		return false
 	if not unlocked().has(ship_id):
-		error = "That hull has not been unlocked yet."
+		error = tr("That hull has not been unlocked yet.")
 		return false
 	var records := copy_profile()
 	var run: Dictionary = records.begin_run()
 	if run.is_empty():
-		error = "Cannot allocate another swarm run."
+		error = tr("Cannot allocate another swarm run.")
 		return false
 	var flight := Session.new()
 	if not flight.configure_swarm(library, rules, origin, ship_id, unlocked(), seed_value):
@@ -297,21 +297,21 @@ func start(origin: int, ship_id: int, seed_value: int) -> bool:
 
 func checkpoint() -> bool:
 	if profile == null:
-		error = "No swarm profile is open."
+		error = tr("No swarm profile is open.")
 		return false
 	return commit(profile, session, receipt)
 
 
 func finish(name: String = "") -> bool:
 	if session == null or session.hull > 0:
-		error = "Only a defeated swarm run can be recorded."
+		error = tr("Only a defeated swarm run can be recorded.")
 		return false
 	var records := copy_profile()
 	var run := int(records.state.pending)
 	var score := int(session.director.score)
 	var outcome: Dictionary = records.finish(run, name, score)
 	if not outcome.accepted:
-		error = "A qualifying swarm score needs a valid pilot name."
+		error = tr("A qualifying swarm score needs a valid pilot name.")
 		return false
 	var result := {
 		"run": run,
@@ -323,7 +323,7 @@ func finish(name: String = "") -> bool:
 		"name": name if outcome.rank >= 0 else ""
 	}
 	if decode(capture()).is_empty():
-		error = "Cannot record an inconsistent swarm run."
+		error = tr("Cannot record an inconsistent swarm run.")
 		return false
 	return commit(records, null, result)
 
@@ -346,18 +346,18 @@ func result_summary() -> Dictionary:
 
 func acknowledge_result() -> bool:
 	if receipt.is_empty():
-		error = "No swarm result awaits acknowledgement."
+		error = tr("No swarm result awaits acknowledgement.")
 		return false
 	return commit(profile, null, {})
 
 
 func abandon() -> bool:
 	if session == null:
-		error = "No active swarm run is available to abandon."
+		error = tr("No active swarm run is available to abandon.")
 		return false
 	var records := copy_profile()
 	if not records.abandon(int(records.state.pending)):
-		error = "No matching swarm run is pending."
+		error = tr("No matching swarm run is pending.")
 		return false
 	return commit(records, null, {})
 
@@ -372,7 +372,7 @@ func copy_profile() -> Profile:
 func commit(records, flight, result: Dictionary) -> bool:
 	var state := capture_parts(records, flight, result)
 	if decode(state).is_empty():
-		error = "Cannot save inconsistent swarm records."
+		error = tr("Cannot save inconsistent swarm records.")
 		return false
 	var encoded := JSON.stringify(state)
 	if not write_checkpoint(encoded):
@@ -387,10 +387,10 @@ func commit(records, flight, result: Dictionary) -> bool:
 
 func write_checkpoint(encoded: String) -> bool:
 	if path.get_file() != FILE_NAME or path.get_base_dir().get_file() != library.id:
-		error = "Swarm records require their own game-content file."
+		error = tr("Swarm records require their own game-content file.")
 		return false
 	if DirAccess.make_dir_recursive_absolute(path.get_base_dir()) != OK:
-		error = "Could not create the swarm save directory."
+		error = tr("Could not create the swarm save directory.")
 		return false
 	if not write_file(path + ".tmp", encoded):
 		return false
@@ -398,10 +398,10 @@ func write_checkpoint(encoded: String) -> bool:
 		if not write_file(path + ".bak.tmp", committed_json):
 			return false
 		if DirAccess.rename_absolute(path + ".bak.tmp", path + ".bak") != OK:
-			error = "Could not preserve the previous swarm checkpoint."
+			error = tr("Could not preserve the previous swarm checkpoint.")
 			return false
 	if DirAccess.rename_absolute(path + ".tmp", path) != OK:
-		error = "Could not finish the swarm checkpoint."
+		error = tr("Could not finish the swarm checkpoint.")
 		return false
 	return true
 
@@ -409,13 +409,13 @@ func write_checkpoint(encoded: String) -> bool:
 func write_file(filename: String, contents: String) -> bool:
 	var file := FileAccess.open(filename, FileAccess.WRITE)
 	if file == null:
-		error = "Could not write the swarm checkpoint."
+		error = tr("Could not write the swarm checkpoint.")
 		return false
 	file.store_string(contents)
 	file.flush()
 	var status := file.get_error()
 	file.close()
 	if status != OK:
-		error = "Could not flush the swarm checkpoint."
+		error = tr("Could not flush the swarm checkpoint.")
 		return false
 	return true

@@ -83,11 +83,11 @@ func explanation() -> String:
 	var binding: Dictionary = library.content.hangar_ui.description.ships
 	var text: String = library.text(int(binding.base + binding.stride * int(quote.offer.id)))
 	text += "\n\n" + preload("res://src/presentation/ship_slots.gd").describe(library, int(quote.offer.id))
-	text += "\n\nYour current ship is traded in. All equipment and cargo are kept. Compatible equipment stays mounted; other equipment moves to the hold."
+	text += tr("\n\nYour current ship is traded in. All equipment and cargo are kept. Compatible equipment stays mounted; other equipment moves to the hold.")
 	if not quote.transfer.is_empty():
 		var moved: int = quote.transfer.hold.size() - quote.loadout.hold.size()
 		var mounted: int = quote.transfer.fitted.filter(func(v): return not v.is_empty()).size()
-		text += "\n\n%d mounted; %d moved to the hold." % [mounted, moved]
+		text += tr("\n\n%d mounted; %d moved to the hold.") % [mounted, moved]
 	if not quote.reason.is_empty():
 		text += "\n\n" + str(quote.reason)
 	return text
@@ -101,8 +101,8 @@ func summary_rows() -> Array:
 	return [
 		[library.text(int(data.labels.price)), str(int(quote.offer.price))],
 		[library.ship_name(int(quote.current_ship)), "−%d" % int(quote.trade_in)],
-		[library.text(int(data.labels.weapons)), "%d kept" % equipment],
-		[library.text(int(data.labels.cargo)), "%dt kept" % cargo],
+		[library.text(int(data.labels.weapons)), tr("%d kept") % equipment],
+		[library.text(int(data.labels.cargo)), tr("%dt kept") % cargo],
 		[library.text(int(data.labels.remaining)), str(int(quote.remaining))]
 	]
 

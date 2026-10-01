@@ -95,9 +95,9 @@ func build_toolbar() -> void:
 	toolbar.add_child(rows)
 	var hint := Label.new()
 	hint.text = (
-		"ACTION FREEZE · Drag to orbit · Two fingers to pan / zoom"
+		tr("ACTION FREEZE · Drag to orbit · Two fingers to pan / zoom")
 		if mobile
-		else "ACTION FREEZE · Drag to orbit · Right-drag to pan · Wheel to zoom"
+		else tr("ACTION FREEZE · Drag to orbit · Right-drag to pan · Wheel to zoom")
 	)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -109,10 +109,10 @@ func build_toolbar() -> void:
 	for item in [
 		["−", zoom.bind(1.15)],
 		["+", zoom.bind(1.0 / 1.15)],
-		["Reset camera", reset_camera],
-		["Hide UI", toggle_ui],
-		["Back to pause", func(): closed.emit(false)],
-		["Resume", func(): closed.emit(true)]
+		[tr("Reset camera"), reset_camera],
+		[tr("Hide UI"), toggle_ui],
+		[tr("Back to pause"), func(): closed.emit(false)],
+		[tr("Resume"), func(): closed.emit(true)]
 	]:
 		var button := Button.new()
 		button.text = item[0]
@@ -122,9 +122,9 @@ func build_toolbar() -> void:
 		actions.add_child(button)
 	var footer := Label.new()
 	footer.text = (
-		"Double-tap to show hidden controls"
+		tr("Double-tap to show hidden controls")
 		if mobile
-		else "H: show controls · P / Esc: back · Controller: right stick orbit, left stick pan, triggers zoom, Y hide, X reset"
+		else tr("H: show controls · P / Esc: back · Controller: right stick orbit, left stick pan, triggers zoom, Y hide, X reset")
 	)
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

@@ -178,7 +178,7 @@ func populate() -> void:
 		rows.add_child(text)
 	elif records.is_empty():
 		var empty := Label.new()
-		empty.text = "No stock available." if section == "shop" else "Your cargo hold is empty."
+		empty.text = tr("No stock available.") if section == "shop" else tr("Your cargo hold is empty.")
 		empty.custom_minimum_size.x = art.row.get_width()
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty.add_theme_font_override("font", font)
@@ -363,9 +363,9 @@ func _draw() -> void:
 		var picture: Texture2D = Catalogue.image(library, entry, true)
 		if picture != null:
 			draw_texture_rect(picture, preview_rect(picture), false)
-		var detail: String = "%d credits" % int(entry.price)
+		var detail: String = tr("%d credits") % int(entry.price)
 		if entry.source == "shop" and entry.kind == "ship":
-			detail = "%d cr after trade-in" % (int(entry.price) - session.ship_value)
+			detail = tr("%d cr after trade-in") % (int(entry.price) - session.ship_value)
 		elif entry.has("count"):
 			detail += " · %d" % int(entry.count)
 		write(

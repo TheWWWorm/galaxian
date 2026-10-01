@@ -103,7 +103,7 @@ func calibrate() -> bool:
 		(
 			notice
 			. emit(
-				"No motion sensor reading. Use a phone with motion sensors and allow sensor access in your browser."
+				tr("No motion sensor reading. Use a phone with motion sensors and allow sensor access in your browser.")
 			)
 		)
 		return false

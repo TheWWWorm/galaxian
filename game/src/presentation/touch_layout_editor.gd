@@ -68,15 +68,15 @@ func build_panel() -> void:
 	var rows := VBoxContainer.new()
 	panel.add_child(rows)
 	var title := Label.new()
-	title.text = "ADJUST CONTROLS"
+	title.text = tr("ADJUST CONTROLS")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", roundi(13 * factor))
 	rows.add_child(title)
 	var hint := Label.new()
 	hint.text = (
-		"Drag any control to move it. Tap one to select, then resize it."
+		tr("Drag any control to move it. Tap one to select, then resize it.")
 		if BitmapFont.is_mobile()
-		else "Drag any control to move it. Click one to select, then resize it."
+		else tr("Drag any control to move it. Click one to select, then resize it.")
 	)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -91,18 +91,18 @@ func build_panel() -> void:
 	sizing.alignment = FlowContainer.ALIGNMENT_CENTER
 	rows.add_child(sizing)
 	for item in [
-		["Smaller", resize.bind(-TouchLayout.SCALE_STEP)],
-		["Bigger", resize.bind(TouchLayout.SCALE_STEP)],
-		["Reset this", reset_selected],
+		[tr("Smaller"), resize.bind(-TouchLayout.SCALE_STEP)],
+		[tr("Bigger"), resize.bind(TouchLayout.SCALE_STEP)],
+		[tr("Reset this"), reset_selected],
 	]:
 		sizing.add_child(action_button(item[0], item[1]))
 	var finishing := HFlowContainer.new()
 	finishing.alignment = FlowContainer.ALIGNMENT_CENTER
 	rows.add_child(finishing)
 	for item in [
-		["Reset all", reset_all],
-		["Cancel", func(): closed.emit(restore)],
-		["Done", func(): closed.emit(working)],
+		[tr("Reset all"), reset_all],
+		[tr("Cancel"), func(): closed.emit(restore)],
+		[tr("Done"), func(): closed.emit(working)],
 	]:
 		finishing.add_child(action_button(item[0], item[1]))
 
@@ -123,7 +123,7 @@ func refresh_caption() -> void:
 	caption.text = (
 		"%s · %d%%"
 		% [
-			TouchLayout.NAMES.get(selected, selected),
+			TouchLayout.control_name(selected),
 			roundi(TouchLayout.scale_of(working, selected) * 100)
 		]
 	)

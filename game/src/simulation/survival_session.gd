@@ -18,7 +18,7 @@ func configure_survival(
 	data, content: Dictionary, origin: int, cycle: int, seed_value: int
 ) -> bool:
 	if not valid_declarations(content, data) or origin < 0 or origin >= data.stations.size():
-		error = "Unsupported survival declarations or location."
+		error = tr("Unsupported survival declarations or location.")
 		return false
 	error = ""
 	declarations = content.duplicate(true)
@@ -423,46 +423,46 @@ func restore(value: Variant) -> bool:
 		value = value.duplicate(true)
 		value.schema = 3
 		if not Mission.Destruction.migrate_actors(value.get("actors")):
-			error = "Invalid legacy survival actors."
+			error = tr("Invalid legacy survival actors.")
 			return false
 	if value is Dictionary and value.get("schema") == 3:
 		value = value.duplicate(true)
 		value.schema = 4
 		if not Mission.Destruction.migrate_motion(value.get("actors")):
-			error = "Invalid legacy survival momentum."
+			error = tr("Invalid legacy survival momentum.")
 			return false
 	if value is Dictionary and value.get("schema") == 4:
 		value = value.duplicate(true)
 		value.schema = 5
 		if not Mission.Evasion.migrate(value.get("actors")):
-			error = "Invalid legacy survival maneuver state."
+			error = tr("Invalid legacy survival maneuver state.")
 			return false
 	if value is Dictionary and value.get("schema") == 5 and library != null:
 		value = value.duplicate(true)
 		value.schema = 6
 		if not Mission.FighterMotion.migrate(value.get("actors"), library.content.fighter_motion):
-			error = "Invalid legacy survival speed state."
+			error = tr("Invalid legacy survival speed state.")
 			return false
 
 	if value is Dictionary and value.get("schema") == 6:
 		value = value.duplicate(true)
 		value.schema = 7
 		if not Mission.Frame.migrate(value.get("actors")):
-			error = "Invalid legacy survival orientation."
+			error = tr("Invalid legacy survival orientation.")
 			return false
 
 	if value is Dictionary and value.get("schema") == 7:
 		value = value.duplicate(true)
 		value.schema = 8
 		if not Mission.Impact.migrate(value.get("actors")):
-			error = "Invalid legacy survival impact state."
+			error = tr("Invalid legacy survival impact state.")
 			return false
 
 	if value is Dictionary and value.get("schema") == 8:
 		value = value.duplicate(true)
 		value.schema = 9
 		if not Mission.Targeting.migrate(value.get("actors")):
-			error = "Invalid legacy survival targeting state."
+			error = tr("Invalid legacy survival targeting state.")
 			return false
 	if value is Dictionary and value.get("schema") == 9:
 		value = value.duplicate(true)
@@ -477,7 +477,7 @@ func restore(value: Variant) -> bool:
 			value.motion.turn = [0.0, 0.0]
 
 	if library == null or declarations.is_empty() or not valid_snapshot_header(value):
-		error = "Invalid survival save or different game content."
+		error = tr("Invalid survival save or different game content.")
 		return false
 	# Validate on a separate session. A failed load cannot alter current play.
 	var candidate = get_script().new()
@@ -487,7 +487,7 @@ func restore(value: Variant) -> bool:
 		)
 		or not candidate.apply_snapshot(value)
 	):
-		error = "The survival save contains inconsistent flight or upgrade state."
+		error = tr("The survival save contains inconsistent flight or upgrade state.")
 		return false
 	for key in [
 		"hud_feedback",
@@ -829,12 +829,12 @@ func restore_actor_profile(index: int, archetype: int) -> void:
 
 func save(path: String) -> bool:
 	if library == null or declarations.is_empty() or active_job.is_empty():
-		error = "No survival run is available to save."
+		error = tr("No survival run is available to save.")
 		return false
 	# A mode must never overwrite campaign/free-play slots, even through a caller
 	# accidentally retaining the previous slot's path during a menu transition.
 	if path.get_file() != "survival.json" or path.get_base_dir().get_file() != content_id:
-		error = "Survival saves require their own game-content slot."
+		error = tr("Survival saves require their own game-content slot.")
 		return false
 	var probe = get_script().new()
 	if (
@@ -843,6 +843,6 @@ func save(path: String) -> bool:
 		)
 		or not probe.restore(capture())
 	):
-		error = "Cannot save inconsistent survival state."
+		error = tr("Cannot save inconsistent survival state.")
 		return false
 	return super.save(path)

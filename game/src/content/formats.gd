@@ -20,14 +20,14 @@ func aem(data: PackedByteArray) -> Dictionary:
 		data.size() < head + 4
 		or (version == 1 and (data.slice(0, 6).get_string_from_ascii() != "AEMesh" or data[6] != 0))
 	):
-		return fail("Unrecognized or truncated mesh header")
+		return fail(tr("Unrecognized or truncated mesh header"))
 	var flags := int(data[head - 1])
 	if flags not in [19, 23, 31]:
-		return fail("Unsupported mesh flags: %d" % flags)
+		return fail(tr("Unsupported mesh flags: %d") % flags)
 	var count := data.decode_u16(head)
 	var pos := head + 2
 	if count == 0 or count % 3 != 0 or pos + count * 2 + 2 > data.size():
-		return fail("Invalid triangle buffer")
+		return fail(tr("Invalid triangle buffer"))
 	var indices := PackedInt32Array()
 	indices.resize(count)
 	for i in count:
@@ -42,10 +42,10 @@ func aem(data: PackedByteArray) -> Dictionary:
 		+ (4 if flags & 8 else 0)
 	)
 	if vertices == 0 or pos + vertices * stride + (1 if version == 1 else 0) != data.size():
-		return fail("Mesh payload size does not match its header")
+		return fail(tr("Mesh payload size does not match its header"))
 	for i in indices:
 		if i >= vertices:
-			return fail("Mesh index exceeds vertex count")
+			return fail(tr("Mesh index exceeds vertex count"))
 	var points := PackedVector3Array()
 	points.resize(vertices)
 	for i in vertices:
@@ -124,14 +124,14 @@ func aei(data: PackedByteArray) -> Dictionary:
 		or (data.slice(0, 7).get_string_from_ascii() != "AEimage" or data[7] != 0)
 		or data[8] != 1
 	):
-		return fail("Unsupported texture header or compression")
+		return fail(tr("Unsupported texture header or compression"))
 	var width := data.decode_u16(9)
 	var height := data.decode_u16(11)
 	var count := data.decode_u16(13)
 	var start := 15 + count * 8
 	var end := start + width * height * 4
 	if width < 1 or height < 1 or width > 4096 or height > 4096 or end + 2 > data.size():
-		return fail("Invalid texture dimensions or payload")
+		return fail(tr("Invalid texture dimensions or payload"))
 	var regions: Array[Rect2i] = []
 	for i in count:
 		var p := 15 + i * 8
@@ -142,7 +142,7 @@ func aei(data: PackedByteArray) -> Dictionary:
 			data.decode_u16(p + 6)
 		)
 		if rect.end.x > width or rect.end.y > height:
-			return fail("Texture region exceeds image bounds")
+			return fail(tr("Texture region exceeds image bounds"))
 		regions.append(rect)
 	var image := Image.create_from_data(
 		width, height, false, Image.FORMAT_RGBA8, data.slice(start, end)
@@ -151,14 +151,14 @@ func aei(data: PackedByteArray) -> Dictionary:
 	var cursor := end + 2
 	var font_count := data.decode_u16(end)
 	if font_count > 32:
-		return fail("Invalid atlas font count")
+		return fail(tr("Invalid atlas font count"))
 	for index in font_count:
 		if cursor + 2 > data.size():
-			return fail("Truncated atlas font")
+			return fail(tr("Truncated atlas font"))
 		var glyph_count := data.decode_u16(cursor)
 		cursor += 2
 		if glyph_count == 0 or glyph_count > 4096 or cursor + glyph_count * 10 > data.size():
-			return fail("Invalid atlas glyph table")
+			return fail(tr("Invalid atlas glyph table"))
 		var glyphs := {}
 		for glyph in glyph_count:
 			var code := data.decode_u16(cursor + glyph * 2)
@@ -176,12 +176,12 @@ func aei(data: PackedByteArray) -> Dictionary:
 				or rect.end.x > width
 				or rect.end.y > height
 			):
-				return fail("Invalid atlas glyph bounds or duplicate codepoint")
+				return fail(tr("Invalid atlas glyph bounds or duplicate codepoint"))
 			glyphs[code] = rect
 		fonts.append(glyphs)
 		cursor += glyph_count * 10
 	if cursor != data.size():
-		return fail("Unsupported atlas font trailer")
+		return fail(tr("Unsupported atlas font trailer"))
 	return {"image": image, "regions": regions, "fonts": font_count, "glyphs": fonts}
 
 
@@ -191,12 +191,12 @@ func language(data: PackedByteArray) -> PackedStringArray:
 	var p := 0
 	while p < data.size():
 		if p + 2 > data.size():
-			error = "Truncated language record"
+			error = tr("Truncated language record")
 			return PackedStringArray()
 		var length := int(data[p]) * 256 + int(data[p + 1])
 		p += 2
 		if p + length > data.size():
-			error = "Truncated language string"
+			error = tr("Truncated language string")
 			return PackedStringArray()
 		strings.append(data.slice(p, p + length).get_string_from_utf8())
 		p += length
@@ -212,7 +212,7 @@ func table(data: PackedByteArray, columns: int) -> Array:
 			continue
 		var fields := clean.split(",")
 		if fields.size() != columns:
-			error = "Invalid table column count"
+			error = tr("Invalid table column count")
 			return []
 		rows.append(Array(fields))
 	return rows
@@ -221,26 +221,26 @@ func table(data: PackedByteArray, columns: int) -> Array:
 func name_list(data: PackedByteArray) -> PackedStringArray:
 	error = ""
 	if data.is_empty() or data.size() > 1024 * 1024:
-		error = "Empty or oversized client name list"
+		error = tr("Empty or oversized client name list")
 		return PackedStringArray()
 	if not valid_utf8(data):
-		error = "Unsupported client name encoding"
+		error = tr("Unsupported client name encoding")
 		return PackedStringArray()
 	var source := data.get_string_from_utf8()
 	# The source format uses semicolon terminators and ignores TAB, LF and CR.
 	source = source.replace("\t", "").replace("\n", "").replace("\r", "")
 	var fields := source.split(";", true)
 	if fields.size() < 2 or fields.size() > 4097 or not fields[-1].strip_edges().is_empty():
-		error = "Invalid or unterminated client name list"
+		error = tr("Invalid or unterminated client name list")
 		return PackedStringArray()
 	fields.remove_at(fields.size() - 1)
 	for value in fields:
 		if value.strip_edges().is_empty() or value.length() > 255:
-			error = "Empty or oversized client name"
+			error = tr("Empty or oversized client name")
 			return PackedStringArray()
 		for character in value.length():
 			if value.unicode_at(character) < 32 or value.unicode_at(character) == 127:
-				error = "Unsupported control character in client name"
+				error = tr("Unsupported control character in client name")
 				return PackedStringArray()
 	return fields
 

@@ -264,7 +264,7 @@ func controller_connection(device: int, connected: bool) -> void:
 	if not connected and controls.device == device:
 		controls.clear()
 		paused = true
-		message_changed.emit("Controller disconnected. Open the pause menu to resume.")
+		message_changed.emit(tr("Controller disconnected. Open the pause menu to resume."))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -454,7 +454,7 @@ func toggle_autopilot() -> void:
 	time_factor = 1
 	if auto_pilot:
 		throttle = 1.0
-	message_changed.emit("Autopilot engaged" if auto_pilot else "Manual flight")
+	message_changed.emit(tr("Autopilot engaged") if auto_pilot else tr("Manual flight"))
 
 
 func cycle_time() -> void:
@@ -462,7 +462,7 @@ func cycle_time() -> void:
 	time_factor = speeds[(speeds.find(time_factor) + 1) % speeds.size()]
 	if (auto_pilot and not can_accelerate_time()) or (not auto_pilot and danger()):
 		time_factor = 1
-	message_changed.emit("Simulation speed ×%d" % time_factor)
+	message_changed.emit(tr("Simulation speed ×%d") % time_factor)
 
 
 func can_accelerate_time() -> bool:
@@ -491,17 +491,17 @@ func danger() -> bool:
 
 func docking_unavailable_reason() -> String:
 	if session == null or library == null or paused or player_destroyed or session.docked:
-		return "Docking is unavailable right now."
+		return tr("Docking is unavailable right now.")
 	if session.slot == "survival":
-		return "Docking is unavailable in survival."
+		return tr("Docking is unavailable in survival.")
 	if not session.active_job.is_empty():
-		return "Complete the mission objectives to reach the destination station."
+		return tr("Complete the mission objectives to reach the destination station.")
 	if station == null:
-		return "Station geometry is unavailable."
+		return tr("Station geometry is unavailable.")
 	if ship.position.distance_to(station.position) > dock_radius:
-		return "Approach within %d m of the station to dock." % ceili(dock_radius)
+		return tr("Approach within %d m of the station to dock.") % ceili(dock_radius)
 	if danger():
-		return "Clear nearby hostiles before docking."
+		return tr("Clear nearby hostiles before docking.")
 	return ""
 
 
@@ -1391,22 +1391,22 @@ func update_objective(notify: bool = true) -> void:
 func objective() -> String:
 	var job: Dictionary = session.active_job
 	if job.is_empty():
-		return "Free flight · Explore the station sector"
+		return tr("Free flight · Explore the station sector")
 	if job.get("ready", false):
 		return (
-			"Objectives complete · Receiving transmission"
+			tr("Objectives complete · Receiving transmission")
 			if not session.ready_to_finish()
-			else "Objectives complete · Arriving at the destination station"
+			else tr("Objectives complete · Arriving at the destination station")
 		)
 	if cinematic_locked():
-		return "Mission · Stand by"
+		return tr("Mission · Stand by")
 	var mission: Dictionary = session.mission_definition()
 	if mission.get("payout_kind") == "finished_asteroids":
 		var seconds := ceili(
 			maxf(0, float(mission.success.duration_ms) - float(job.elapsed_ms)) / 1000.0
 		)
 		return (
-			"Asteroids cleared  %d · %d credits · %d:%02d remaining"
+			tr("Asteroids cleared  %d · %d credits · %d:%02d remaining")
 			% [
 				session.Mission.Scenery.destroyed(job.scenery),
 				session.mission_reward(),
@@ -1425,27 +1425,27 @@ func objective() -> String:
 			maxf(0, float(mission.success.duration_ms) - float(job.elapsed_ms)) / 1000.0
 		)
 		return (
-			"Protect convoy  %d / %d ships · %d:%02d remaining"
+			tr("Protect convoy  %d / %d ships · %d:%02d remaining")
 			% [alive, total, seconds / 60, seconds % 60]
 		)
 	if (
 		session.Mission.route_pending(mission, job)
 		and mission.success.kind != "enemy_prefix_destroyed"
 	):
-		return "Mission · Reach waypoint %d / %d" % [int(job.stage) + 1, session.route_length()]
+		return tr("Mission · Reach waypoint %d / %d") % [int(job.stage) + 1, session.route_length()]
 	if mission.success.kind == "message_shown" and job.kills >= job.target:
-		return "Mission · Receiving closing transmission"
+		return tr("Mission · Receiving closing transmission")
 	if mission.success.kind == "enemy_destroyed":
-		return "Mission · Destroy the marked target"
+		return tr("Mission · Destroy the marked target")
 	var remaining := ""
 	var limit := float(session.mission_definition().deadline_ms)
 	if limit > 0:
 		var seconds := ceili(maxf(0, limit - float(job.elapsed_ms)) / 1000.0)
-		remaining = " · %d:%02d remaining" % [seconds / 60, seconds % 60]
+		remaining = tr(" · %d:%02d remaining") % [seconds / 60, seconds % 60]
 	if mission.success.kind == "enemy_prefix_destroyed":
 		return (
 			(
-				"Clear targets  %d / %d"
+				tr("Clear targets  %d / %d")
 				% [
 					session.Mission.destroyed_prefix(mission, job, int(mission.success.count)),
 					int(mission.success.count)
@@ -1453,7 +1453,7 @@ func objective() -> String:
 			)
 			+ remaining
 		)
-	return "Clear targets  %d / %d" % [int(job.kills), int(job.target)] + remaining
+	return tr("Clear targets  %d / %d") % [int(job.kills), int(job.target)] + remaining
 
 
 func update_camera(dt: float) -> void:

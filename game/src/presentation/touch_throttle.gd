@@ -48,7 +48,7 @@ func set_throttle_at(global_point: Vector2) -> void:
 
 
 func refresh() -> void:
-	speed_text = "%d m/s" % roundi(flight.speed)
+	speed_text = tr("%d m/s") % roundi(flight.speed)
 	queue_redraw()
 
 

@@ -4,7 +4,7 @@ const Formats = preload("res://src/content/formats.gd")
 const NativeData = preload("res://src/content/native_data.gd")
 var thread := Thread.new()
 var mutex := Mutex.new()
-var message := "Reading embedded game data"
+var message := tr("Reading embedded game data")
 var cancelled := false
 var ratio := 0.0
 
@@ -49,7 +49,7 @@ func is_alive() -> bool:
 func finish() -> Dictionary:
 	var result: Variant = thread.wait_to_finish()
 	if not result is Dictionary:
-		return {"content": {}, "error": "Could not read embedded game data."}
+		return {"content": {}, "error": tr("Could not read embedded game data.")}
 	return result
 
 
@@ -66,14 +66,14 @@ func read_assets(
 	var languages: Array[String] = []
 	var hashes := {}
 	for i in selected.size():
-		if not report("Importing " + selected[i].get_file(), float(i + 1) / selected.size()):
-			error = "Import cancelled."
+		if not report(tr("Importing %s") % selected[i].get_file(), float(i + 1) / selected.size()):
+			error = tr("Import cancelled.")
 			break
 		var rel := selected[i]
 		var bytes := zip.read_file(prefix + rel)
 		total += bytes.size()
 		if bytes.is_empty() or bytes.size() > 32 * 1024 * 1024 or total > 128 * 1024 * 1024:
-			error = "Invalid or oversized resource: " + rel
+			error = tr("Invalid or oversized resource: %s") % rel
 			break
 		if rel.ends_with(".aem"):
 			if reader.aem(bytes).is_empty():
@@ -85,7 +85,7 @@ func read_assets(
 				break
 		elif rel.ends_with(".lang"):
 			if reader.language(bytes).size() < 200:
-				error = "Incomplete language file: " + rel
+				error = tr("Incomplete language file: %s") % rel
 				break
 			languages.append(rel.trim_suffix(".lang"))
 		elif rel.get_file() in ["ships.txt", "items.txt", "stations.txt", "systems.txt"]:
@@ -99,7 +99,7 @@ func read_assets(
 			for row in rows:
 				for column in range(0 if rel.get_file() in ["ships.txt", "items.txt"] else 1, cols):
 					if not str(row[column]).is_valid_int():
-						error = "Non-numeric game data: " + rel
+						error = tr("Non-numeric game data: %s") % rel
 						break
 			if not error.is_empty():
 				break
@@ -107,7 +107,7 @@ func read_assets(
 		DirAccess.make_dir_recursive_absolute(output.get_base_dir())
 		var file := FileAccess.open(output, FileAccess.WRITE)
 		if file == null:
-			error = "Could not write imported resource: " + rel
+			error = tr("Could not write imported resource: %s") % rel
 			break
 		file.store_buffer(bytes)
 		file.close()
@@ -116,5 +116,5 @@ func read_assets(
 		hash.update(bytes)
 		hashes[rel] = hash.finish().hex_encode()
 	if languages.is_empty() and error.is_empty():
-		error = "No supported language data was found."
+		error = tr("No supported language data was found.")
 	return {"error": error, "languages": languages, "hashes": hashes, "bytes": total}

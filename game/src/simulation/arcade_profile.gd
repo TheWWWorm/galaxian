@@ -12,7 +12,7 @@ var error := ""
 
 func configure(identity: String, parameters: Dictionary, ships: int) -> bool:
 	if identity.is_empty() or not valid_rules(parameters) or ships < 1 or ships > 128:
-		error = "Unsupported arcade profile declarations."
+		error = tr("Unsupported arcade profile declarations.")
 		return false
 	content_id = identity
 	rules = parameters.duplicate(true)
@@ -118,7 +118,7 @@ func capture() -> Dictionary:
 
 
 func restore(value: Variant) -> bool:
-	error = "Invalid arcade profile or different game content."
+	error = tr("Invalid arcade profile or different game content.")
 	if (
 		state.is_empty()
 		or not value is Dictionary
@@ -195,25 +195,25 @@ func restore(value: Variant) -> bool:
 func save(path: String) -> bool:
 	error = ""
 	if path.get_file() != "arcade.json" or path.get_base_dir().get_file() != content_id:
-		error = "Arcade records require their own game-content file."
+		error = tr("Arcade records require their own game-content file.")
 		return false
 	var candidate = get_script().new()
 	if not candidate.configure(content_id, rules, ship_count) or not candidate.restore(capture()):
-		error = "Cannot save inconsistent arcade records."
+		error = tr("Cannot save inconsistent arcade records.")
 		return false
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	var file := FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if file == null:
-		error = "Could not write arcade records."
+		error = tr("Could not write arcade records.")
 		return false
 	file.store_string(JSON.stringify(capture()))
 	file.flush()
 	file.close()
 	if FileAccess.file_exists(path) and DirAccess.copy_absolute(path, path + ".bak") != OK:
-		error = "Could not preserve previous arcade records."
+		error = tr("Could not preserve previous arcade records.")
 		return false
 	if DirAccess.rename_absolute(path + ".tmp", path) != OK:
-		error = "Could not finish arcade records."
+		error = tr("Could not finish arcade records.")
 		return false
 	return true
 
@@ -227,5 +227,5 @@ func load_file(path: String) -> bool:
 			and restore(json.data)
 		):
 			return true
-	error = "No valid arcade records were found."
+	error = tr("No valid arcade records were found.")
 	return false

@@ -41,7 +41,7 @@ func receive(args: Array) -> void:
 	DirAccess.make_dir_recursive_absolute(PATH.get_base_dir())
 	var file := FileAccess.open(PATH, FileAccess.WRITE)
 	if file == null:
-		failed.emit("The browser could not stage this archive.")
+		failed.emit(tr("The browser could not stage this archive."))
 		return
 	file.store_buffer(bytes)
 	file.close()

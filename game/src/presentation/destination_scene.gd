@@ -65,11 +65,11 @@ func _init() -> void:
 
 func configure(library, station_id: int) -> bool:
 	if camera != null:
-		error = "Destination scene is already configured."
+		error = tr("Destination scene is already configured.")
 		return false
 	data = library.content.station_ui.destination.scene
 	if not valid_data(data):
-		error = "Unsupported destination scene declaration."
+		error = tr("Unsupported destination scene declaration.")
 		return false
 	var location: Dictionary = library.station_definition(station_id)
 	scene_mode = int(data.planet_mode if location.planet else data.orbital_mode)

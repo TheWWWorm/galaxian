@@ -61,9 +61,9 @@ func configure_destination(source, pilot, index: int) -> void:
 	notice.add_theme_font_size_override("font_size", 9)
 	notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if not session.active_job.is_empty():
-		show_notice("Complete your active mission before travelling.")
+		show_notice(tr("Complete your active mission before travelling."))
 	elif not quote.is_empty() and session.credits < quote.total:
-		show_notice("Not enough credits for this journey.")
+		show_notice(tr("Not enough credits for this journey."))
 	action_requested.connect(func(action):
 		if action == "back": back_requested.emit()
 		elif action == "travel" and not travel_button.disabled: travel_requested.emit()

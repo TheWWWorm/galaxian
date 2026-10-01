@@ -33,21 +33,21 @@ func cancel() -> void:
 func install_archive(path: String, tree: SceneTree) -> bool:
 	error = ""
 	if not FileAccess.file_exists(path):
-		error = "The selected file could not be opened."
+		error = tr("The selected file could not be opened.")
 		return false
 	var source := FileAccess.open(path, FileAccess.READ)
 	if source == null or source.get_length() > 128 * 1024 * 1024:
-		error = "Choose a compatible Galaxy on Fire 1 IPA under 128 MiB."
+		error = tr("Choose a compatible Galaxy on Fire 1 IPA under 128 MiB.")
 		return false
 	source.close()
 	var zip := ZIPReader.new()
 	if zip.open(path) != OK:
-		error = "This file is not a readable IPA archive."
+		error = tr("This file is not a readable IPA archive.")
 		return false
 	var names := zip.get_files()
 	if names.size() > 4096:
 		zip.close()
-		error = "The archive contains too many entries."
+		error = tr("The archive contains too many entries.")
 		return false
 	var prefix := ""
 	for n in names:
@@ -56,31 +56,31 @@ func install_archive(path: String, tree: SceneTree) -> bool:
 			break
 	if prefix.is_empty():
 		zip.close()
-		error = "No compatible Galaxy on Fire 1 content was found in this IPA."
+		error = tr("No compatible Galaxy on Fire 1 content was found in this IPA.")
 		return false
 	# The executable is an import-time data source only. Never write it to cache.
 	var executable := prefix + prefix.trim_suffix("/").get_file().trim_suffix(".app")
 	if not zip.file_exists(executable):
 		zip.close()
-		error = "The application data source is missing."
+		error = tr("The application data source is missing.")
 		return false
-	progress.emit("Reading embedded campaign and catalogue data", 0.0)
+	progress.emit(tr("Reading embedded campaign and catalogue data"), 0.0)
 	await tree.process_frame
 	if cancelled:
 		zip.close()
-		error = "Import cancelled."
+		error = tr("Import cancelled.")
 		return false
 	native_job = NativeImport.new()
 	if native_job.start(zip.read_file(executable)) != OK:
 		native_job = null
 		zip.close()
-		error = "Could not start the content reader."
+		error = tr("Could not start the content reader.")
 		return false
 	var result := await collect_job(tree)
 	var embedded: Dictionary = result.content
 	if cancelled:
 		zip.close()
-		error = "Import cancelled."
+		error = tr("Import cancelled.")
 		return false
 	if embedded.is_empty():
 		zip.close()
@@ -97,7 +97,7 @@ func install_archive(path: String, tree: SceneTree) -> bool:
 	]:
 		if not zip.file_exists(prefix + required):
 			zip.close()
-			error = "Required game resource is missing: " + required
+			error = tr("Required game resource is missing: %s") % required
 			return false
 	var selected: Array[String] = []
 	for name in names:
@@ -118,26 +118,26 @@ func install_archive(path: String, tree: SceneTree) -> bool:
 			selected.append(rel)
 	if selected.size() < 10:
 		zip.close()
-		error = "The archive has incomplete game content."
+		error = tr("The archive has incomplete game content.")
 		return false
 	var id := FileAccess.get_sha256(path)
 	var stage := cache_base.path_join(id + ".partial-" + str(Time.get_ticks_usec()))
 	var destination := cache_base.path_join(id)
 	if DirAccess.make_dir_recursive_absolute(stage) != OK:
 		zip.close()
-		error = "Cannot create the local content cache."
+		error = tr("Cannot create the local content cache.")
 		return false
 	native_job = NativeImport.new()
 	if native_job.start_assets(zip, prefix, selected, stage) != OK:
 		native_job = null
 		zip.close()
 		remove_stage(stage)
-		error = "Could not start the asset reader."
+		error = tr("Could not start the asset reader.")
 		return false
 	var assets := await collect_job(tree)
 	zip.close()
 	if cancelled or not str(assets.error).is_empty():
-		error = "Import cancelled." if cancelled else str(assets.error)
+		error = tr("Import cancelled.") if cancelled else str(assets.error)
 		remove_stage(stage)
 		return false
 	var languages: Array[String] = assets.languages
@@ -146,7 +146,7 @@ func install_archive(path: String, tree: SceneTree) -> bool:
 	var embedded_bytes := JSON.stringify(embedded).to_utf8_buffer()
 	var embedded_file := FileAccess.open(stage.path_join("content.json"), FileAccess.WRITE)
 	if embedded_file == null:
-		error = "Could not write imported content definitions."
+		error = tr("Could not write imported content definitions.")
 		remove_stage(stage)
 		return false
 	embedded_file.store_buffer(embedded_bytes)
@@ -156,10 +156,10 @@ func install_archive(path: String, tree: SceneTree) -> bool:
 	embedded_hash.update(embedded_bytes)
 	hashes["content.json"] = embedded_hash.finish().hex_encode()
 	# Validate every normalized reference against the actual extracted catalogues.
-	progress.emit("Checking imported game data", 0.0)
+	progress.emit(tr("Checking imported game data"), 0.0)
 	await tree.process_frame
 	if cancelled:
-		error = "Import cancelled."
+		error = tr("Import cancelled.")
 		remove_stage(stage)
 		return false
 	var validator = load("res://src/content/library.gd").new()
@@ -177,7 +177,7 @@ func install_archive(path: String, tree: SceneTree) -> bool:
 	}
 	var meta_file := FileAccess.open(stage.path_join("manifest.json"), FileAccess.WRITE)
 	if meta_file == null:
-		error = "Could not finish the content manifest."
+		error = tr("Could not finish the content manifest.")
 		remove_stage(stage)
 		return false
 	meta_file.store_string(JSON.stringify(manifest))
@@ -187,23 +187,23 @@ func install_archive(path: String, tree: SceneTree) -> bool:
 		var old := destination + ".previous"
 		remove_stage(old)
 		if DirAccess.rename_absolute(destination, old) != OK:
-			error = "Could not update the content cache."
+			error = tr("Could not update the content cache.")
 			remove_stage(stage)
 			return false
 		if DirAccess.rename_absolute(stage, destination) != OK:
 			DirAccess.rename_absolute(old, destination)
-			error = "Could not activate imported content."
+			error = tr("Could not activate imported content.")
 			remove_stage(stage)
 			return false
 		remove_stage(old)
 	elif DirAccess.rename_absolute(stage, destination) != OK:
-		error = "Could not activate imported content."
+		error = tr("Could not activate imported content.")
 		remove_stage(stage)
 		return false
 	root = destination
 	content_id = id
 	metadata = manifest
-	progress.emit("Content ready", 1.0)
+	progress.emit(tr("Content ready"), 1.0)
 	return true
 
 
@@ -224,7 +224,7 @@ func open_cache(directory: String) -> bool:
 	error = ""
 	var file := directory.path_join("manifest.json")
 	if not FileAccess.file_exists(file):
-		error = "Import your game IPA to begin."
+		error = tr("Import your game IPA to begin.")
 		return false
 	var value = JSON.parse_string(FileAccess.get_file_as_string(file))
 	if (
@@ -233,7 +233,7 @@ func open_cache(directory: String) -> bool:
 		or value.get("profile") != "gof1-ios"
 		or not value.get("files") is Dictionary
 	):
-		error = "The imported content manifest is invalid. Import the IPA again."
+		error = tr("The imported content manifest is invalid. Import the IPA again.")
 		return false
 	for rel in value.files:
 		if (
@@ -243,7 +243,7 @@ func open_cache(directory: String) -> bool:
 			or not FileAccess.file_exists(directory.path_join(rel))
 			or FileAccess.get_sha256(directory.path_join(rel)) != str(value.files[rel])
 		):
-			error = "Imported content is missing or damaged. Import the IPA again."
+			error = tr("Imported content is missing or damaged. Import the IPA again.")
 			return false
 	root = directory
 	content_id = str(value.sha256)

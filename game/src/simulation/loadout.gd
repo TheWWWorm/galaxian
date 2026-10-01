@@ -32,7 +32,7 @@ func supports(ship_id: int, item_id: int) -> bool:
 func fit(index: int, ship_id: int) -> bool:
 	error = ""
 	if index < 0 or index >= hold.size() or not supports(ship_id, int(hold[index].id)):
-		error = "This ship has no compatible mount."
+		error = tr("This ship has no compatible mount.")
 		return false
 	var record: Dictionary = hold[index]
 	var category := int(library.items[int(record.id)][1])
@@ -49,7 +49,7 @@ func unfit(category: int, free_space: int) -> bool:
 	if category < 0 or category >= fitted.size() or fitted[category].is_empty():
 		return false
 	if free_space <= 0:
-		error = "The cargo hold is full."
+		error = tr("The cargo hold is full.")
 		return false
 	hold.append(fitted[category])
 	fitted[category] = {}
@@ -66,7 +66,7 @@ func ship_exchange(ship_id: int, cargo_units: int) -> Dictionary:
 			new_hold.append(item)
 			new_fitted[category] = {}
 	if cargo_units + new_hold.size() > int(library.ships[ship_id][5]):
-		error = "The new ship cannot carry your cargo and unmounted equipment."
+		error = tr("The new ship cannot carry your cargo and unmounted equipment.")
 		return {}
 	return {"hold": new_hold, "fitted": new_fitted}
 
@@ -98,7 +98,7 @@ func capture() -> Dictionary:
 
 
 func restore(value: Variant, ship_id: int, cargo_units: int) -> bool:
-	error = "Invalid saved equipment."
+	error = tr("Invalid saved equipment.")
 	if (
 		not value is Dictionary
 		or not value.get("hold") is Array

@@ -1,6 +1,7 @@
 extends RefCounted
 ## Native view model: source catalogues plus the pilot's actual inventory/offers.
 const Combat = preload("res://src/simulation/combat.gd")
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
 
 
 static func valid_data(value: Variant) -> bool:
@@ -137,8 +138,8 @@ static func entries(library, pilot, tab: String) -> Array:
 static func name(library, entry: Dictionary) -> String:
 	if entry.kind == "empty":
 		return (
-			library.text(int(library.content.hangar_ui.labels.category_base) + int(entry.category))
-			+ " — Empty"
+			EngineLanguage.translate("%s — Empty")
+			% library.text(int(library.content.hangar_ui.labels.category_base) + int(entry.category))
 		)
 	return (
 		library.ship_name(int(entry.id))
@@ -156,7 +157,7 @@ static func type_name(library, entry: Dictionary) -> String:
 
 static func description(library, entry: Dictionary) -> String:
 	if entry.is_empty() or entry.kind == "empty":
-		return "Select compatible equipment in Cargo to install it."
+		return EngineLanguage.translate("Select compatible equipment in Cargo to install it.")
 	var group := "ships" if entry.kind == "ship" else "items"
 	var binding: Dictionary = library.content.hangar_ui.description[group]
 	return library.text(int(binding.base + binding.stride * entry.id))
@@ -177,17 +178,17 @@ static func actions(library, pilot, entry: Dictionary) -> Array:
 	match entry.source:
 		"shop":
 			var allowed: bool = pilot.credits >= entry.price and room
-			var caption := "Buy"
+			var caption := EngineLanguage.translate("Buy")
 			if entry.kind == "ship":
 				# Let the review explain affordability and transfer limits before Buy.
 				allowed = pilot.ship_id != entry.id
-				caption = "Exchange"
+				caption = EngineLanguage.translate("Exchange")
 			return [{"action": "buy", "text": caption, "enabled": allowed}]
 		"fitted":
 			return [
 				{
 					"action": "remove",
-					"text": "Move to hold",
+					"text": EngineLanguage.translate("Move to hold"),
 					"enabled": entry.kind != "empty" and room
 				}
 			]
@@ -195,10 +196,10 @@ static func actions(library, pilot, entry: Dictionary) -> Array:
 			return [
 				{
 					"action": "fit",
-					"text": "Install",
+					"text": EngineLanguage.translate("Install"),
 					"enabled": pilot.loadout.supports(pilot.ship_id, int(entry.id))
 				},
-				{"action": "sell", "text": "Sell", "enabled": shop}
+				{"action": "sell", "text": EngineLanguage.translate("Sell"), "enabled": shop}
 			]
 		"cargo":
 			return [{"action": "sell_cargo", "text": library.text(int(library.content.hangar_ui.quantity.labels.sell)), "enabled": shop}]
@@ -228,11 +229,11 @@ static func information(library, pilot, entry: Dictionary) -> String:
 		var item: Dictionary = library.equipment(int(entry.id))
 		values = [[labels.capacity if item.category == library.SHIELD_CATEGORY else labels.damage,item.value]]
 		if item.interval_ms > 0:
-			values.append([labels.recharge if item.category == library.SHIELD_CATEGORY else labels.rate,"%.2f /s" % (1000.0/item.interval_ms)])
+			values.append([labels.recharge if item.category == library.SHIELD_CATEGORY else labels.rate,EngineLanguage.translate("%.2f /s") % (1000.0/item.interval_ms)])
 	for pair in values:
 		result += "\n\n%s: %s" % [library.text(int(pair[0])),str(pair[1])]
 	if entry.kind == "ship":
 		result = preload("res://src/presentation/ship_slots.gd").describe(library, int(entry.id)) + "\n\n" + result
 	if entry.source == "shop" and entry.kind == "ship":
-		result += "\n\nExchanging ships transfers compatible mounted equipment; the rest goes into the hold."
+		result += "\n\n" + EngineLanguage.translate("Exchanging ships transfers compatible mounted equipment; the rest goes into the hold.")
 	return result

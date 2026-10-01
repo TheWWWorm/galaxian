@@ -73,7 +73,7 @@ func _init() -> void:
 
 func configure(source, location: int, ship: int, offers: Array) -> bool:
 	if camera != null:
-		error = "Hangar scene is already configured."
+		error = tr("Hangar scene is already configured.")
 		return false
 	library = source
 	data = library.content.hangar_ui.scene
@@ -118,7 +118,7 @@ func refresh_inventory(ship: int, offers: Array) -> bool:
 		if offer.kind != "ship" or int(offer.count) <= 0:
 			continue
 		if int(offer.count) > data.stock_positions.size() - stock.size():
-			error = "Supplied Hangar has no positions for this many ships in stock."
+			error = tr("Supplied Hangar has no positions for this many ships in stock.")
 			return false
 		for index in int(offer.count):
 			stock.append(int(offer.id))
@@ -147,7 +147,7 @@ func refresh_inventory(ship: int, offers: Array) -> bool:
 func add_resource(parent: Node3D, identifier: int) -> bool:
 	var resource: Dictionary = library.content.resources.get(str(identifier), {})
 	if resource.is_empty():
-		error = "Missing supplied Hangar mesh %d." % identifier
+		error = tr("Missing supplied Hangar mesh %d.") % identifier
 		return false
 	var model: MeshInstance3D = library.model(str(resource.path).get_file().trim_suffix(".aem"))
 	parent.add_child(model)
@@ -159,11 +159,11 @@ func add_resource(parent: Node3D, identifier: int) -> bool:
 
 func add_ship(parent: Node3D, ship: int, position_data: Array) -> bool:
 	if ship < 0 or ship >= library.ships.size():
-		error = "Unsupported Hangar ship index."
+		error = tr("Unsupported Hangar ship index.")
 		return false
 	var actor := int(library.content.tables.buyable_ships[ship])
 	if not data.shadows.has(str(actor)):
-		error = "Missing supplied Hangar shadow for actor %d." % actor
+		error = tr("Missing supplied Hangar shadow for actor %d.") % actor
 		return false
 	var display := Node3D.new()
 	parent.add_child(display)

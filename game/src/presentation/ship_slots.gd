@@ -1,4 +1,5 @@
 extends RefCounted
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
 
 
 static func describe(library, ship_id: int) -> String:
@@ -14,4 +15,4 @@ static func describe(library, ship_id: int) -> String:
 				]
 			)
 		)
-	return "Weapon slots\n" + "\n".join(rows)
+	return EngineLanguage.translate("Weapon slots") + "\n" + "\n".join(rows)

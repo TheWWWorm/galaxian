@@ -4,6 +4,7 @@ extends RefCounted
 ## stored as an offset from the imported anchor rather than an absolute place, so
 ## a different screen keeps the original composition and only moves what the
 ## player moved.
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
 const MIN_SCALE := .6
 const MAX_SCALE := 2.2
 const SCALE_STEP := .1
@@ -21,18 +22,21 @@ const IDS: Array[String] = [
 	"fire",
 	"stick",
 ]
-const NAMES := {
-	"pause": "Pause",
-	"AUTOPILOT": "Autopilot",
-	"TIME": "Simulation speed",
-	"DOCK": "Dock",
-	"throttle": "Throttle",
-	"boost": "Boost",
-	"weapon": "Weapon",
-	"missiles": "Missiles",
-	"fire": "Fire",
-	"stick": "Steering stick",
-}
+
+
+static func control_name(key: String) -> String:
+	return {
+		"pause": EngineLanguage.translate("Pause"),
+		"AUTOPILOT": EngineLanguage.translate("Autopilot"),
+		"TIME": EngineLanguage.translate("Simulation speed"),
+		"DOCK": EngineLanguage.translate("Dock"),
+		"throttle": EngineLanguage.translate("Throttle"),
+		"boost": EngineLanguage.translate("Boost"),
+		"weapon": EngineLanguage.translate("Weapon"),
+		"missiles": EngineLanguage.translate("Missiles"),
+		"fire": EngineLanguage.translate("Fire"),
+		"stick": EngineLanguage.translate("Steering stick"),
+	}.get(key, key)
 
 
 static func sanitize(stored) -> Dictionary:

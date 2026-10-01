@@ -28,17 +28,17 @@ func show_root() -> void:
 		{"text": library.text(int(labels.resume)), "action": "resume"},
 		{"text": library.text(int(labels.options)), "action": "options"},
 		{"text": library.text(int(labels.help)), "action": "help"},
-		{"text": "Action freeze", "action": "action_freeze", "hint": "Freeze the scene and explore it with the camera."},
-		{"text": "Save pilot", "action": "save", "enabled": can_save},
+		{"text": tr("Action freeze"), "action": "action_freeze", "hint": tr("Freeze the scene and explore it with the camera.")},
+		{"text": tr("Save pilot"), "action": "save", "enabled": can_save},
 		{"text": library.text(int(labels.menu)), "action": "menu",
-			"hint": "Save your pilot and return to the main menu." if can_save else "Return to the main menu."}
+			"hint": tr("Save your pilot and return to the main menu.") if can_save else tr("Return to the main menu.")}
 	]
 	if can_adjust_controls:
 		# Placing the controls is something a player does while looking at them,
 		# so it belongs beside the flight rather than in the options screen.
-		rows.insert(3, {"text": "Adjust controls", "action": "touch_layout",
-			"hint": "Move and resize the on-screen flight controls."})
-	present("pause", rows, "Abandon run" if survival else "Load / recover", "abandon" if survival else "load")
+		rows.insert(3, {"text": tr("Adjust controls"), "action": "touch_layout",
+			"hint": tr("Move and resize the on-screen flight controls.")})
+	present("pause", rows, tr("Abandon run") if survival else tr("Load / recover"), "abandon" if survival else "load")
 	footer.visible = survival or can_save
 	var focusable: Array[Control] = []
 	for button in buttons:
@@ -59,7 +59,7 @@ func handle_action(action: String) -> void:
 		"back": back()
 		"abandon":
 			if survival:
-				show_choice("Abandon this run? This ends the run without recording a high score.", ["Abandon", library.text(int(library.content.briefing_ui.labels.back))], "abandon")
+				show_choice(tr("Abandon this run? This ends the run without recording a high score."), [tr("Abandon"), library.text(int(library.content.briefing_ui.labels.back))], "abandon")
 		"save":
 			if can_save: selected.emit(action)
 		"load":

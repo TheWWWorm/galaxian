@@ -3,19 +3,23 @@ extends RefCounted
 ## come from the imported localisation table; only the modifier phrasing and
 ## the prompt are remake-authored, because the cards themselves are.
 const Build = preload("res://src/simulation/swarm_build.gd")
-const MODIFIER_TEXT := {
-	"damage": "%s damage %s",
-	"reload": "%s reload %s",
-	"muzzle": "%s extra muzzle",
-	"reach": "%s range %s",
-	"velocity": "%s muzzle velocity %s",
-	"integrity": "Hull integrity %s",
-	"agility": "Agility %s",
-	"recovery": "Repair %d hull on every kill",
-	"insight": "Combat experience %s",
-	"boost": "Boost recharge %s",
-	"regeneration": "Shield regeneration %s"
-}
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
+
+
+static func modifier_text(key: String) -> String:
+	return {
+		"damage": EngineLanguage.translate("%s damage %s"),
+		"reload": EngineLanguage.translate("%s reload %s"),
+		"muzzle": EngineLanguage.translate("%s extra muzzle"),
+		"reach": EngineLanguage.translate("%s range %s"),
+		"velocity": EngineLanguage.translate("%s muzzle velocity %s"),
+		"integrity": EngineLanguage.translate("Hull integrity %s"),
+		"agility": EngineLanguage.translate("Agility %s"),
+		"recovery": EngineLanguage.translate("Repair %d hull on every kill"),
+		"insight": EngineLanguage.translate("Combat experience %s"),
+		"boost": EngineLanguage.translate("Boost recharge %s"),
+		"regeneration": EngineLanguage.translate("Shield regeneration %s")
+	}[key]
 
 
 static func signed(percent: int) -> String:
@@ -27,13 +31,13 @@ static func label(
 ) -> String:
 	match str(card.get("kind")):
 		"mount":
-			return "Mount " + library.item_name(int(card.item))
+			return EngineLanguage.translate("Mount %s") % library.item_name(int(card.item))
 		"upgrade":
-			return "Refit " + library.item_name(int(card.item))
+			return EngineLanguage.translate("Refit %s") % library.item_name(int(card.item))
 		"shield":
-			return "Fit " + library.item_name(int(card.item))
+			return EngineLanguage.translate("Fit %s") % library.item_name(int(card.item))
 		"hull":
-			return "Transfer to " + library.ship_name(int(card.item))
+			return EngineLanguage.translate("Transfer to %s") % library.ship_name(int(card.item))
 		"modifier":
 			var key := str(card.modifier)
 			var rule: Dictionary = rules.cards.modifiers[key]
@@ -42,15 +46,15 @@ static func label(
 				# The card names the hull it will actually bank, not a percentage
 				# of a number the player never sees.
 				var taken := int(build.get("recovery", 0)) + 1
-				return MODIFIER_TEXT[key] % int(
+				return modifier_text(key) % int(
 					round(Build.recovery_hull({"recovery": taken}, rules, amounts))
 				)
 			if key == "muzzle":
-				return MODIFIER_TEXT[key] % library.item_name(int(card.item))
+				return modifier_text(key) % library.item_name(int(card.item))
 			if int(card.category) >= 0:
-				return MODIFIER_TEXT[key] % [library.item_name(int(card.item)), change]
-			return MODIFIER_TEXT[key] % change
-	return "Continue"
+				return modifier_text(key) % [library.item_name(int(card.item)), change]
+			return modifier_text(key) % change
+	return EngineLanguage.translate("Continue")
 
 
 static func detail(card: Dictionary, rules: Dictionary, library, build: Dictionary) -> String:
@@ -60,14 +64,14 @@ static func detail(card: Dictionary, rules: Dictionary, library, build: Dictiona
 			var ballistics: Dictionary = library.weapon_ballistics(int(card.item))
 			if ballistics.is_empty():
 				return ""
-			return "%d damage every %.2fs" % [int(ballistics.damage), float(ballistics.interval)]
+			return EngineLanguage.translate("%d damage every %.2fs") % [int(ballistics.damage), float(ballistics.interval)]
 		"shield":
 			var row: Array = library.items[int(card.item)]
-			return "%d capacity, one point per %.1fs" % [int(row[7]), float(row[8]) / 1000.0]
+			return EngineLanguage.translate("%d capacity, one point per %.1fs") % [int(row[7]), float(row[8]) / 1000.0]
 		"hull":
 			var definition: Dictionary = library.ship_definition(int(card.item))
 			var slots := Build.categories(library, int(card.item)).size()
-			return "%d hull, %d mounts" % [int(definition.hull), slots]
+			return EngineLanguage.translate("%d hull, %d mounts") % [int(definition.hull), slots]
 		"modifier":
 			var key := str(card.modifier)
 			var taken := (
@@ -75,14 +79,14 @@ static func detail(card: Dictionary, rules: Dictionary, library, build: Dictiona
 				if int(card.category) >= 0
 				else int(build.get(key, 0))
 			)
-			return "stack %d of %d" % [taken + 1, int(rules.cards.modifiers[key].stacks)]
+			return EngineLanguage.translate("stack %d of %d") % [taken + 1, int(rules.cards.modifiers[key].stacks)]
 	return ""
 
 
 static func prompt(level: int, pending: int) -> String:
 	if pending > 1:
-		return "Level %d  (%d more)" % [level, pending - 1]
-	return "Level %d" % level
+		return EngineLanguage.translate("Level %d  (%d more)") % [level, pending - 1]
+	return EngineLanguage.translate("Level %d") % level
 
 
 static func captions(
@@ -91,7 +95,7 @@ static func captions(
 	var result: Array[String] = []
 	for card in cards:
 		result.append(label(card, rules, library, build, amounts))
-	result.append("Decline  (repair %d%%)" % int(rules.cards.decline_repair_percent))
+	result.append(EngineLanguage.translate("Decline  (repair %d%%)") % int(rules.cards.decline_repair_percent))
 	return result
 
 

@@ -26,13 +26,13 @@ var motion_cache := {}
 
 func configure_swarm(data, parameters: Dictionary, origin: int, ship_id: int, hulls: Array, seed_value: int) -> bool:
 	if not valid_declarations(data, parameters):
-		error = "Unsupported swarm rules or missing imported arcade content."
+		error = tr("Unsupported swarm rules or missing imported arcade content.")
 		return false
 	if origin < 0 or origin >= data.stations.size():
-		error = "Unsupported swarm location."
+		error = tr("Unsupported swarm location.")
 		return false
 	if ship_id < 0 or ship_id >= data.ships.size() or not hulls.has(ship_id):
-		error = "That hull is not available for a swarm run."
+		error = tr("That hull is not available for a swarm run.")
 		return false
 	error = ""
 	rules = parameters.duplicate(true)
@@ -465,7 +465,7 @@ func capture() -> Dictionary:
 func restore(value: Variant) -> bool:
 	error = ""
 	if library == null or rules.is_empty() or not valid_snapshot_header(value):
-		error = "Invalid swarm save or different game content."
+		error = tr("Invalid swarm save or different game content.")
 		return false
 	var candidate = get_script().new()
 	if (
@@ -479,7 +479,7 @@ func restore(value: Variant) -> bool:
 		)
 		or not candidate.apply_snapshot(value)
 	):
-		error = "The swarm save contains inconsistent flight or build state."
+		error = tr("The swarm save contains inconsistent flight or build state.")
 		return false
 	for key in [
 		"hud_feedback",
@@ -724,10 +724,10 @@ func valid_saved_actor(value: Variant, index: int, known: Array) -> bool:
 
 func save(path: String) -> bool:
 	if library == null or rules.is_empty() or active_job.is_empty():
-		error = "No swarm run is available to save."
+		error = tr("No swarm run is available to save.")
 		return false
 	if path.get_file() != "swarm.json" or path.get_base_dir().get_file() != content_id:
-		error = "Swarm saves require their own game-content slot."
+		error = tr("Swarm saves require their own game-content slot.")
 		return false
 	var probe = get_script().new()
 	if (
@@ -736,6 +736,6 @@ func save(path: String) -> bool:
 		)
 		or not probe.restore(capture())
 	):
-		error = "Cannot save inconsistent swarm state."
+		error = tr("Cannot save inconsistent swarm state.")
 		return false
 	return super.save(path)

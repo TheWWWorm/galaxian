@@ -2,6 +2,8 @@ extends SceneTree
 ## Existing imported content only; isolated preferences and transient pilots.
 const Library = preload("res://src/content/library.gd")
 const Controls = preload("res://src/input/controls.gd")
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
+const TOUCH_HELP := "Touch: use the stick to steer. Touch nearby in the lower-left area to place the pad there until you release it. Drag the remaining open view to look around. Release to return the camera forward. Slide the right-edge throttle to set cruise speed. Tap Boost for a burst. Hold Fire to shoot; double-tap Fire to enable autofire. Tap Fire once to stop. AUTO appears on the fire button while enabled. Pausing clears autofire.\n\nNavigation engages autopilot. Speedup appears beside it during safe travel; Dock appears near an eligible station. In joystick mode, steering, throttle, Boost and firing return to manual flight at normal time."
 var checks := 0
 var failures := 0
 class TestMain extends "res://src/main.gd":
@@ -36,10 +38,15 @@ func run():
 	var languages := lib.available_languages()
 	check(not languages.is_empty(), "Language selector has imported choices")
 	var panel = app.options_panel
-	check(panel.entries.any(func(e): return e.action == "language"), "Language is visible in top-level Options")
+	check(panel.entries.any(func(e): return e.action == "languages"), "Language is visible in top-level Options")
+	panel.handle_action("languages")
+	check(panel.entries.map(func(e): return e.action) == ["language", "engine_language"], "The language page offers game text and interface text")
+	panel.back()
 	for language in languages:
 		lib.radio_lines_cache["stale"] = ["old text"]
 		app.change_option("language", language)
+		# Interface text following the game rebuilds the open menu.
+		panel = app.options_panel
 		check(lib.language_code == language and app.settings.language == language, "Select " + language)
 		check(lib.radio_lines_cache.is_empty(), "Language change invalidates dialogue layout")
 		var expected := lib.reader.language(lib.read(language + ".lang"))
@@ -54,7 +61,10 @@ func run():
 	check(not lib.set_language("../missing") and lib.strings == before, "Invalid language cannot change loaded text")
 	var next_language: String = languages[(languages.find(lib.language_code) + 1) % languages.size()]
 	await process_frame
-	var language_button: Vector2 = panel.buttons[3].get_global_rect().get_center()
+	panel = app.options_panel
+	panel.handle_action("languages")
+	await process_frame
+	var language_button: Vector2 = panel.buttons[0].get_global_rect().get_center()
 	await touch(language_button, 9, true); await touch(language_button, 9, false)
 	check(lib.language_code == next_language and app.settings.language == next_language, "Language row cycles imported choices and persists selection")
 	check(app.importer.open_cache(args[0]), "Reopen installed manifest")
@@ -193,7 +203,9 @@ func check_touch(app):
 	app.show_options()
 	app.change_option("language", app.library.available_languages()[0])
 	check(app.session.capture() == pilot_before and app.session.library == app.library, "Changing language during a flight preserves the pilot and shared content")
-	check(app.controls_help().begins_with("Touch:") and "double-tap Fire" in app.controls_help(), "Touch help leads with autofire instructions")
+	var touch_help: String = app.tr(TOUCH_HELP)
+	check(app.controls_help().begins_with(touch_help) and "double-tap Fire" in TOUCH_HELP, "Touch help leads with autofire instructions")
+	check(touch_help != TOUCH_HELP or EngineLanguage.current == "en", "Touch help follows the interface language")
 	app.close_options()
 	app.resume_flight(); app.flight.set_physics_process(false); await process_frame
 	check(not controls.touch_autofire and controls.touch_look == Vector2.ZERO, "Pause/resume clears held touches and autofire")

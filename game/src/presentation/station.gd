@@ -10,7 +10,7 @@ var turn_ms := 0.0
 func configure(library, kind: int, tilt_samples: Vector2i) -> bool:
 	var data: Dictionary = library.content.station_models
 	if rotor != null or not data.types.has(str(kind)):
-		error = "Unknown or already configured station model."
+		error = tr("Unknown or already configured station model.")
 		return false
 	if (
 		tilt_samples.x < 0
@@ -18,7 +18,7 @@ func configure(library, kind: int, tilt_samples: Vector2i) -> bool:
 		or tilt_samples.x >= data.tilt_bound
 		or tilt_samples.y >= data.tilt_bound
 	):
-		error = "Station tilt samples exceed the imported bounds."
+		error = tr("Station tilt samples exceed the imported bounds.")
 		return false
 	var tilt := Node3D.new()
 	add_child(tilt)
@@ -38,7 +38,7 @@ func configure(library, kind: int, tilt_samples: Vector2i) -> bool:
 		if not FileAccess.file_exists(library.root.path_join(path)):
 			missing_resources.append(identifier)
 			if field == "body":
-				error = "Missing source station body: " + path
+				error = tr("Missing source station body: %s") % path
 				return false
 			continue
 		var node: MeshInstance3D = library.model(path.get_file().get_basename())

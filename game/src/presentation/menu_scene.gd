@@ -37,7 +37,7 @@ func _init() -> void:
 
 func configure(library, station_id: int, player_actor: int, title: bool, seed_value: int) -> bool:
 	if camera != null:
-		error = "Menu scene is already configured."
+		error = tr("Menu scene is already configured.")
 		return false
 	data = library.content.menu_traffic
 	steering = library.content.fighter_steering

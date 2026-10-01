@@ -161,10 +161,10 @@ func _process(_delta: float) -> void:
 	else:
 		place(objective, flight.waypoint, "objective", true)
 	var title := (
-		"DOCK" if flight.station != null and flight.session.active_job.is_empty() else "OBJECTIVE"
+		tr("DOCK") if flight.station != null and flight.session.active_job.is_empty() else tr("OBJECTIVE")
 	)
 	var distance: float = flight.ship.position.distance_to(flight.waypoint)
-	objective.label.text = title + "  %d m" % int(distance)
+	objective.label.text = tr("%s  %d m") % [title, int(distance)]
 	while targets.size() < flight.actors.size():
 		targets.append(create_marker(Color("ff8070"), false))
 	var directions: Dictionary = flight.session.Mission.Sequence.directives(
@@ -302,7 +302,7 @@ func setup_artwork() -> void:
 	for action in ["boost", "fire", "weapon", "missiles", "pause"]:
 		var control := FlightButton.new()
 		control.kind = action
-		control.tooltip_text = "Hold to fire. Double-tap for autofire; tap again to stop." if action == "fire" else action.capitalize()
+		control.tooltip_text = tr("Hold to fire. Double-tap for autofire; tap again to stop.") if action == "fire" else preload("res://src/presentation/touch_layout.gd").control_name(action)
 		control.visible = touch_enabled
 		if action == "fire":
 			# The source overlays the luminous disk beneath the permanent fire frame.
@@ -320,7 +320,7 @@ func setup_artwork() -> void:
 	for action in actions:
 		var control := FlightButton.new()
 		control.kind = action
-		control.tooltip_text = {"AUTOPILOT": "Autopilot", "TIME": "Simulation speed", "DOCK": "Dock"}[action]
+		control.tooltip_text = {"AUTOPILOT": tr("Autopilot"), "TIME": tr("Simulation speed"), "DOCK": tr("Dock")}[action]
 		control.hide()
 		add_child(control)
 		extra_buttons[action] = control
@@ -332,7 +332,7 @@ func setup_artwork() -> void:
 	throttle_control.flight = flight
 	throttle_control.hide()
 	add_child(throttle_control)
-	autofire_label.text = "AUTO"
+	autofire_label.text = tr("AUTO")
 	autofire_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	autofire_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	autofire_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -479,9 +479,9 @@ func refresh_navigation_controls() -> void:
 
 func status_text() -> String:
 	if docking_available:
-		return "Docking available"
+		return tr("Docking available")
 	if flight.auto_pilot:
-		return "AUTOPILOT · %dx" % flight.time_factor
+		return tr("AUTOPILOT · %dx") % flight.time_factor
 	return flight.objective()
 
 
@@ -899,7 +899,7 @@ func draw_progress(state: Dictionary, rect: Rect2, inset: float, hull_row: float
 		),
 		Color("e8c06a")
 	)
-	bitmap("LVL %d" % int(state.level), rect.position + Vector2(rect.size.x + 6, 0))
+	bitmap(tr("LVL %d") % int(state.level), rect.position + Vector2(rect.size.x + 6, 0))
 
 
 func draw_survival(extent: Vector2) -> void:

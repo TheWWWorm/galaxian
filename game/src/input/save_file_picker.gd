@@ -46,7 +46,7 @@ func receive(args: Array) -> void:
 		return
 	var file := FileAccess.open(PATH, FileAccess.WRITE)
 	if file == null:
-		failed.emit("Could not stage the save import.")
+		failed.emit(tr("Could not stage the save import."))
 		return
 	file.store_buffer(JavaScriptBridge.js_buffer_to_packed_byte_array(args[1]))
 	file.close()

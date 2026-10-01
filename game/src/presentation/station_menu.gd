@@ -240,7 +240,7 @@ func configure(source, pilot) -> void:
 	var caption: String = (
 		library.text(int(data.footer_labels.continue))
 		if session.campaign_state == "active"
-		else "Launch"
+		else tr("Launch")
 	)
 	var right := make_button(
 		caption, "launch", library.ui_image(foot.normal), library.ui_image(foot.pressed)
@@ -582,9 +582,9 @@ func draw_status() -> void:
 		var note_at := Vector2(
 			config.list[0], config.list[1] + 6 * (art.row.get_height() + data.row_gap)
 		)
-		write("* Recorded since save upgrade.", Rect2(note_at, Vector2(art.row.get_width(), 20)))
+		write(tr("* Recorded since save upgrade."), Rect2(note_at, Vector2(art.row.get_width(), 20)))
 		write(
-			"Earlier time and kills unavailable.",
+			tr("Earlier time and kills unavailable."),
 			Rect2(note_at + Vector2(0, int(font.get_meta("source_height")) + 3), Vector2(art.row.get_width(), 20))
 		)
 

@@ -32,11 +32,11 @@ func configure(source, pilot) -> void:
 	var back := make_button(library.text(int(library.content.map_ui.labels.back)),"back",idle,selected)
 	back.position = Vector2(foot.margin,foot.y)
 	back.size = idle.get_size()
-	search_button = make_button("Search","search",idle,selected)
+	search_button = make_button(tr("Search"),"search",idle,selected)
 	mirror_button(search_button)
 	search_button.position = Vector2(480-foot.margin-idle.get_width(),foot.y)
 	search_button.size = idle.get_size()
-	search_button.tooltip_text = "Search stations (F / controller X)"
+	search_button.tooltip_text = tr("Search stations (F / controller X)")
 	actions = [back,search_button]
 	search_panel = Panel.new()
 	search_panel.position = chart.BOARD.position
@@ -49,7 +49,7 @@ func configure(source, pilot) -> void:
 	search_panel.add_theme_stylebox_override("panel",skin)
 	canvas.add_child(search_panel)
 	search_field = LineEdit.new()
-	search_field.placeholder_text = "Search stations…"
+	search_field.placeholder_text = tr("Search stations…")
 	search_field.position = Vector2(8,8)
 	search_field.size = Vector2(search_panel.size.x-16,26)
 	search_field.add_theme_font_override("font",font)
@@ -94,7 +94,7 @@ func set_search(open: bool) -> void:
 	chart.mouse_filter = Control.MOUSE_FILTER_IGNORE if open else Control.MOUSE_FILTER_STOP
 	chart.focus_mode = Control.FOCUS_NONE if open else Control.FOCUS_ALL
 	chart.clear_pointer()
-	search_button.text = library.text(int(library.content.map_ui.labels.map)) if open else "Search"
+	search_button.text = library.text(int(library.content.map_ui.labels.map)) if open else tr("Search")
 	if open: search_field.grab_focus()
 	else: chart.grab_focus()
 

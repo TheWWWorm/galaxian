@@ -1,5 +1,6 @@
 extends RefCounted
 ## Match the window by default; optional fixed picture ratios preserve geometry.
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
 const RATIOS := {"auto": Vector2i(1440, 900), "4:3": Vector2i(1200, 900),
 	"16:9": Vector2i(1600, 900), "16:10": Vector2i(1440, 900), "21:9": Vector2i(2100, 900)}
 
@@ -39,9 +40,9 @@ static func frame_rate_caption(window: Window, value: Variant) -> String:
 	if choice is int:
 		return str(choice)
 	if choice == "unlimited":
-		return "Unlimited"
+		return EngineLanguage.translate("Unlimited")
 	var rate := panel_refresh_rate(window)
-	return "Auto (%d)" % rate if rate > 0 else "Auto"
+	return EngineLanguage.translate("Auto (%d)") % rate if rate > 0 else EngineLanguage.translate("Auto")
 
 
 static func apply_aspect(window: Window, ratio: String) -> void:

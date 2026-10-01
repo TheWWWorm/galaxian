@@ -9,6 +9,7 @@ const RecoveryPanel = preload("res://src/presentation/recovery.gd")
 const Dialogue = preload("res://src/presentation/dialogue.gd")
 const HUD = preload("res://src/presentation/hud.gd")
 const BitmapFont = preload("res://src/presentation/bitmap_font.gd")
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
 const DisplaySettings = preload("res://src/presentation/display_settings.gd")
 const TouchLayout = preload("res://src/presentation/touch_layout.gd")
 const GalaxyMap = preload("res://src/presentation/galaxy_map.gd")
@@ -99,7 +100,13 @@ var settings := {
 	"fullscreen": false,
 	"aspect_ratio": "auto",
 	"frame_rate": "auto",
-	"text_font": "auto"
+	"text_font": "auto",
+	# Engine text: "auto" follows the game text, or a language code. Empty until
+	# the player chooses, so a first start can ask when the system differs.
+	"engine_language": "",
+	# The language the last imported game text was written in, so the engine
+	# text is right before the content is open again.
+	"content_language": ""
 }
 var notification_text := ""
 var notification_time := 0.0
@@ -115,6 +122,7 @@ var auto_exit := false
 var exiting := false
 var transient_preview := false
 var web_picker
+var version_label: Label
 
 
 func _init() -> void:
@@ -127,9 +135,10 @@ func _ready() -> void:
 	if OS.has_feature("touch_preview"):
 		preload("res://src/presentation/bitmap_font.gd").mobile_cache = 1
 	settings.touch = preload("res://src/presentation/bitmap_font.gd").is_mobile()
+	load_settings()
+	apply_engine_language()
 	setup_world()
 	setup_ui()
-	load_settings()
 	if OS.has_feature("touch_preview"):
 		settings.touch = true
 		settings.extra_flight_buttons = true
@@ -207,7 +216,8 @@ func setup_ui() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(spacer)
-	top.add_child(label("NATIVE REMAKE  /  " + str(ProjectSettings.get_setting("application/config/version")), 12, Color("91a7b8")))
+	version_label = label("", 12, Color("91a7b8"))
+	top.add_child(version_label)
 	ui.add_child(status)
 	status.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	status.offset_left = 48
@@ -219,7 +229,6 @@ func setup_ui() -> void:
 	ui.add_child(save_dialog)
 	save_dialog.access = FileDialog.ACCESS_FILESYSTEM
 	save_dialog.use_native_dialog = OS.has_feature("android")
-	save_dialog.filters = PackedStringArray(["*.gofsave ; Galaxy on Fire save export"])
 	save_dialog.file_selected.connect(save_file_selected)
 	save_picker.selected.connect(review_save_import)
 	save_picker.failed.connect(notify)
@@ -227,18 +236,26 @@ func setup_ui() -> void:
 	dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dialog.access = FileDialog.ACCESS_FILESYSTEM
 	dialog.use_native_dialog = OS.has_feature("android")
-	dialog.filters = PackedStringArray(["*.ipa ; Galaxy on Fire 1 iPhone archive"])
 	dialog.size = Vector2i(950, 650)
-	dialog.title = "Choose your Galaxy on Fire 1 IPA"
 	dialog.file_selected.connect(import_file)
 	ui.add_child(confirmation)
 	confirmation.canceled.connect(resume_briefing_input)
-	confirmation.title = "Start a new pilot"
 	confirmation.confirmed.connect(
 		func():
 			if confirm_action.is_valid():
 				confirm_action.call()
 	)
+	apply_static_text()
+
+
+func apply_static_text() -> void:
+	## Text set once when the interface is built, set again when the engine
+	## language changes.
+	version_label.text = tr("NATIVE REMAKE  /  %s") % str(ProjectSettings.get_setting("application/config/version"))
+	save_dialog.filters = PackedStringArray(["*.gofsave ; " + tr("Galaxy on Fire save export")])
+	dialog.filters = PackedStringArray(["*.ipa ; " + tr("Galaxy on Fire 1 iPhone archive")])
+	dialog.title = tr("Choose your Galaxy on Fire 1 IPA")
+	confirmation.title = tr("Start a new pilot")
 
 
 func make_theme() -> Theme:
@@ -465,23 +482,28 @@ func show_title() -> void:
 		top.hide()
 		status.hide()
 		page.hide()
+		var asking := not language_question_choices().is_empty()
+		if asking:
+			# The question is written in two languages; the imported glyphs
+			# may lack the letters of either.
+			library.scalable_text_cache = 1
 		build_title_panel()
-		show_title_menu("main")
+		show_title_menu("language_question" if asking else "main")
 	else:
 		var box := column(510)
 		caption(
-			"Galaxy on Fire", "The original iPhone adventure, running in a new native engine.", box
+			"Galaxy on Fire", tr("The original iPhone adventure, running in a new native engine."), box
 		)
 		paragraph(
-			"Choose your Galaxy on Fire 1 IPA. Ships, stations, textures, text and music are imported entirely on your device.",
+			tr("Choose your Galaxy on Fire 1 IPA. Ships, stations, textures, text and music are imported entirely on your device."),
 			box
 		)
-		paragraph("No original game content is included with this engine.", box)
-		button("Choose game IPA…", choose_file, box, not busy)
-		button("Options & controls", show_options, box)
+		paragraph(tr("No original game content is included with this engine."), box)
+		button(tr("Choose game IPA…"), choose_file, box, not busy)
+		button(tr("Options & controls"), show_options, box)
 		if not OS.has_feature("web"):
-			button("Exit", shutdown, box)
-		status.text = "Choose an IPA, or drop it onto this window."
+			button(tr("Exit"), shutdown, box)
+		status.text = tr("Choose an IPA, or drop it onto this window.")
 	play_menu_music(true)
 
 
@@ -493,54 +515,61 @@ func show_title_menu(section: String) -> void:
 		"main":
 			for key in ["start", "load", "options", "help"]:
 				entries.append({"text": library.text(int(labels[key])), "action": key})
-			entries.append({"text": "Game files", "action": "files"})
+			entries.append({"text": tr("Game files"), "action": "files"})
 		"start":
 			entries = [
-				{"text": "Start campaign", "action": "campaign"},
-				{"text": "Skip campaign · Explore", "action": "explore"},
+				{"text": tr("Start campaign"), "action": "campaign"},
+				{"text": tr("Skip campaign · Explore"), "action": "explore"},
 				{
 					"text": library.text(int(library.content.survival.menu.title)),
 					"action": "survival"
 				},
-				{"text": "Swarm", "action": "swarm"}
+				{"text": tr("Swarm"), "action": "swarm"}
 			]
 		"load":
 			entries = [
 				{
-					"text": "Continue campaign",
+					"text": tr("Continue campaign"),
 					"action": "load_campaign",
 					"enabled": FileAccess.file_exists(save_path("campaign"))
 				},
 				{
-					"text": "Continue exploration",
+					"text": tr("Continue exploration"),
 					"action": "load_free",
 					"enabled": FileAccess.file_exists(save_path("free"))
 				},
 				{
-					"text": "Save current pilot",
+					"text": tr("Save current pilot"),
 					"action": "save",
 					"enabled": session != null and not transient_preview
 				}
 			]
 		"files":
 			entries = [
-				{"text": "Choose game IPA…", "action": "import"},
-				{"text": "Transfer saves", "action": "transfer"},
-				{"text": "About this remake", "action": "about"}
+				{"text": tr("Choose game IPA…"), "action": "import"},
+				{"text": tr("Transfer saves"), "action": "transfer"},
+				{"text": tr("About this remake"), "action": "about"}
 			]
 		"transfer":
-			entries = [{"text": "Export saves…", "action": "export_saves"}, {"text": "Import saves…", "action": "import_saves"}, {"text": "Save transfer help", "action": "transfer_help"}]
+			entries = [{"text": tr("Export saves…"), "action": "export_saves"}, {"text": tr("Import saves…"), "action": "import_saves"}, {"text": tr("Save transfer help"), "action": "transfer_help"}]
 		"transfer_help":
-			body = "Move campaign, exploration and survival saves between devices or the web and native apps. Import the same game IPA on both devices first."
+			body = tr("Move campaign, exploration and survival saves between devices or the web and native apps. Import the same game IPA on both devices first.")
 		"help":
 			body = controls_help()
+		"language_question":
+			var choices := language_question_choices()
+			body = language_question_text(choices[0]) + "\n\n" + language_question_text(choices[1])
+			entries = [
+				{"text": EngineLanguage.native_name(choices[0]), "action": "language_system"},
+				{"text": EngineLanguage.native_name(choices[1]), "action": "language_game"}
+			]
 		"about":
-			body = "Galaxy on Fire — native engine remake\n\nUses the artwork, text and game data imported from your supplied iPhone game.\n\nPlay the linear campaign, then explore freely. Skip campaign enters exploration directly without completion rewards.\n\nIndependent native systems recreate the game using your imported content. Exact legacy animation and driver behavior may differ."
+			body = tr("Galaxy on Fire — native engine remake\n\nUses the artwork, text and game data imported from your supplied iPhone game.\n\nPlay the linear campaign, then explore freely. Skip campaign enters exploration directly without completion rewards.\n\nIndependent native systems recreate the game using your imported content. Exact legacy animation and driver behavior may differ.")
 	var back := (
-		"Exit" if section == "main" else library.text(int(library.content.briefing_ui.labels.back))
+		tr("Exit") if section == "main" else library.text(int(library.content.briefing_ui.labels.back))
 	)
 	title_panel.present(section, entries, back, "exit" if section == "main" else "main", body)
-	if OS.has_feature("web") and section == "main":
+	if (OS.has_feature("web") and section == "main") or section == "language_question":
 		title_panel.footer.hide()
 
 
@@ -573,6 +602,8 @@ func title_action(action: String) -> void:
 				save_game()
 		"import":
 			choose_file()
+		"language_system", "language_game":
+			answer_language_question(action == "language_system")
 		"exit":
 			shutdown()
 
@@ -636,11 +667,11 @@ func station_action(action: String) -> void:
 func show_station_menu() -> void:
 	var entries := [
 		{"text": library.text(int(library.content.title_ui.labels.options)), "action": "options"},
-		{"text": "Save pilot", "action": "save"}
+		{"text": tr("Save pilot"), "action": "save"}
 	]
 	if session.campaign_state == "active":
-		entries.append({"text": "Skip campaign · Explore", "action": "skip"})
-	entries.append({"text": "Save & return to title", "action": "title"})
+		entries.append({"text": tr("Skip campaign · Explore"), "action": "skip"})
+	entries.append({"text": tr("Save & return to title"), "action": "title"})
 	entries.append(
 		{"text": library.text(int(library.content.briefing_ui.labels.back)), "action": "back"}
 	)
@@ -672,7 +703,7 @@ func accept_board_offer(reference: Dictionary, offer: Dictionary) -> void:
 		or reference != session.contract_reference(index)
 		or offer != current[index]
 	):
-		notify("This mission offer has changed. Reopen the mission board.")
+		notify(tr("This mission offer has changed. Reopen the mission board."))
 		return
 	accept_contract(index)
 
@@ -810,8 +841,8 @@ func import_file(path: String) -> void:
 	clear_page()
 	screen = "import"
 	var box := column()
-	caption("Importing your galaxy", "Reading the game archive on this device.", box)
-	button("Cancel import", cancel_import, box)
+	caption(tr("Importing your galaxy"), tr("Reading the game archive on this device."), box)
+	button(tr("Cancel import"), cancel_import, box)
 	var success := await importer.install(path, get_tree())
 	busy = false
 	if exiting:
@@ -828,19 +859,19 @@ func import_file(path: String) -> void:
 	config.set_value("content", "directory", importer.root)
 	config.save("user://install.cfg")
 	show_title()
-	notify("Game content imported successfully.")
+	notify(tr("Game content imported successfully."))
 
 
 func import_progress(message: String, ratio: float) -> void:
 	if importer.cancelled:
-		status.text = "Cancelling import…"
+		status.text = tr("Cancelling import…")
 		return
 	status.text = message if ratio <= 0 else "%d%%  ·  %s" % [int(ratio * 100), message]
 
 
 func cancel_import() -> void:
 	importer.cancel()
-	status.text = "Cancelling import…"
+	status.text = tr("Cancelling import…")
 
 
 func activate_content() -> bool:
@@ -858,6 +889,7 @@ func activate_content() -> bool:
 	ready_content = library.open(importer.root, importer.content_id, lang)
 	if not ready_content:
 		return false
+	follow_game_language()
 	show_ship(int(library.content.initial.ship_index))
 	sky_material.set_shader_parameter("nebula", library.texture("nebulas"))
 	sky_material.set_shader_parameter("has_nebula", true)
@@ -896,7 +928,7 @@ func show_menu_scene(title: bool, preview_location: int = -1) -> void:
 		menu_scene_key = key
 		showcase.hide()
 	else:
-		notify("Unable to display supplied menu scenery: " + menu_scene.error)
+		notify(tr("Unable to display supplied menu scenery: %s") % menu_scene.error)
 		menu_scene.hide()
 		menu_scene.queue_free()
 		menu_scene = null
@@ -923,8 +955,8 @@ func request_start(skip: bool) -> void:
 	var slot := "free" if skip else "campaign"
 	if FileAccess.file_exists(save_path(slot)):
 		confirm(
-			"Replace this pilot?",
-			"The existing %s pilot will be replaced. The other save slot is kept." % slot,
+			tr("Replace this pilot?"),
+			tr("The existing %s pilot will be replaced. The other save slot is kept.") % slot,
 			func(): start_game(skip)
 		)
 	else:
@@ -966,8 +998,8 @@ func continue_game(slot: String) -> void:
 
 func request_skip() -> void:
 	confirm(
-		"Skip the campaign?",
-		"Your campaign pilot stays saved. A free-exploration pilot will be created from this ship and credits, replacing the free-exploration slot if one exists.",
+		tr("Skip the campaign?"),
+		tr("Your campaign pilot stays saved. A free-exploration pilot will be created from this ship and credits, replacing the free-exploration slot if one exists."),
 		skip_current
 	)
 
@@ -1018,7 +1050,7 @@ func save_game(announce: bool = true) -> bool:
 		and not swarm_active()
 		and (session == defeated_session or not session.can_retry())
 	):
-		if announce: notify("The last saved game is preserved. Load it to try again.")
+		if announce: notify(tr("The last saved game is preserved. Load it to try again."))
 		return true
 	if transient_preview:
 		return true
@@ -1031,7 +1063,7 @@ func save_game(announce: bool = true) -> bool:
 			or (survival_active() and survival_archive.session != session)
 		):
 			success = false
-			failure = "The survival run has no matching archive."
+			failure = tr("The survival run has no matching archive.")
 		else:
 			success = survival_archive.checkpoint()
 			failure = survival_archive.error
@@ -1042,7 +1074,7 @@ func save_game(announce: bool = true) -> bool:
 			or (swarm_active() and swarm_archive.session != session)
 		):
 			success = false
-			failure = "The swarm run has no matching archive."
+			failure = tr("The swarm run has no matching archive.")
 		else:
 			success = swarm_archive.checkpoint()
 			failure = swarm_archive.error
@@ -1053,7 +1085,7 @@ func save_game(announce: bool = true) -> bool:
 		notify(failure)
 		if screen != "pause": status.show()
 	elif announce:
-		notify("Pilot saved.")
+		notify(tr("Pilot saved."))
 	return success
 
 
@@ -1074,7 +1106,7 @@ func open_swarm_archive() -> bool:
 
 func show_swarm_menu() -> void:
 	if not library.content.get("survival") is Dictionary:
-		notify("Arcade data is unavailable in this installation.")
+		notify(tr("Arcade data is unavailable in this installation."))
 		return
 	if not open_swarm_archive():
 		return
@@ -1095,7 +1127,7 @@ func show_swarm_menu() -> void:
 	status.hide()
 	var entries: Array = []
 	if swarm_archive.session != null:
-		entries.append({"text": "Resume run", "action": "resume"})
+		entries.append({"text": tr("Resume run"), "action": "resume"})
 	var order: Array = SwarmArchive.hull_order(library)
 	var unlocked: Array = swarm_archive.unlocked()
 	var rules: Dictionary = swarm_archive.rules
@@ -1111,14 +1143,14 @@ func show_swarm_menu() -> void:
 			library,
 			float(library.content.survival.setup.hull)
 		)
-		var label := "%s · %d hull · %d mounts" % [library.ship_name(id), int(arena), slots]
+		var label := tr("%s · %d hull · %d mounts") % [library.ship_name(id), int(arena), slots]
 		if not open_hull:
 			var needed: int = swarm_archive.unlock_points(position)
-			label = "%s · locked · %s at %s" % [
+			label = tr("%s · locked · %s at %s") % [
 				library.ship_name(id), swarm_archive.rank_name(position), comma(needed)
 			]
 		entries.append({"text": label, "action": "hull_%d" % id, "enabled": open_hull})
-	var body := "Fend off the swarm; every kill fills the level bar.   Best: %s" % comma(
+	var body := tr("Fend off the swarm; every kill fills the level bar.   Best: %s") % comma(
 		swarm_archive.best_score()
 	)
 	if not swarm_archive.recovered.is_empty():
@@ -1287,7 +1319,7 @@ func submit_swarm_name(pilot: String) -> void:
 
 func show_survival_menu(tab: int = 0, recent_run: int = 0) -> void:
 	if not library.content.get("survival") is Dictionary:
-		notify("Survival data is unavailable in this installation.")
+		notify(tr("Survival data is unavailable in this installation."))
 		return
 	if survival_archive == null or survival_archive.profile.content_id != library.id:
 		var candidate := SurvivalArchive.new()
@@ -1320,7 +1352,7 @@ func show_survival_menu(tab: int = 0, recent_run: int = 0) -> void:
 	survival_panel.start_requested.connect(start_survival)
 	survival_panel.back_requested.connect(show_title)
 	if survival_archive.session != null:
-		survival_panel.footer[1].tooltip_text = "Resume the saved survival run"
+		survival_panel.footer[1].tooltip_text = tr("Resume the saved survival run")
 
 
 func start_survival() -> void:
@@ -1543,11 +1575,11 @@ func show_load_menu() -> void:
 	var autosave := Session.new()
 	autosave.configure(library, session.slot == "free")
 	var can_resume: bool = autosave.load_retry(save_path(session.slot)) and autosave.slot == session.slot
-	var entries := [{"text": "Load autosave", "action": "autosave", "enabled": can_resume}]
+	var entries := [{"text": tr("Load autosave"), "action": "autosave", "enabled": can_resume}]
 	for key in ["departure", "station"]:
-		entries.append({"text": "Load mission / flight start" if key == "departure" else "Load last station", "action": key, "enabled": available and saved.checkpoint_candidate(key) != null})
+		entries.append({"text": tr("Load mission / flight start") if key == "departure" else tr("Load last station"), "action": key, "enabled": available and saved.checkpoint_candidate(key) != null})
 	if available and saved.checkpoints.is_empty() and not saved.docked:
-		entries.append({"text": "Recover to station (older save)", "action": "legacy"})
+		entries.append({"text": tr("Recover to station (older save)"), "action": "legacy"})
 	pause_panel.present("load", entries, library.text(int(library.content.briefing_ui.labels.back)), "back")
 	pause_panel.action_requested.connect(load_choice)
 
@@ -1567,7 +1599,7 @@ func load_choice(action: String) -> void:
 		close_load_menu()
 		return
 	if action == "legacy":
-		confirm("Recover older save?", "This save has no mission-start or station snapshot. Return to its station with repaired hull and shields, keeping its current inventory and credits. The unfinished mission is reset without completion rewards.", restore_checkpoint.bind(action))
+		confirm(tr("Recover older save?"), tr("This save has no mission-start or station snapshot. Return to its station with repaired hull and shields, keeping its current inventory and credits. The unfinished mission is reset without completion rewards."), restore_checkpoint.bind(action))
 		return
 	restore_checkpoint(action)
 
@@ -1578,13 +1610,13 @@ func restore_checkpoint(action: String) -> void:
 	candidate.configure(library, session.slot == "free")
 	var loaded := candidate.load_retry(save_path(session.slot)) if action == "autosave" else candidate.load_save(save_path(session.slot))
 	if not loaded or candidate.slot != session.slot:
-		notify("No usable saved game is available in this pilot slot.")
+		notify(tr("No usable saved game is available in this pilot slot."))
 		status.show()
 		return
 	if action in ["departure", "station"]:
 		candidate = candidate.checkpoint_candidate(action)
 		if candidate == null:
-			notify("This save has no usable checkpoint of that kind.")
+			notify(tr("This save has no usable checkpoint of that kind."))
 			status.show()
 			return
 	elif action == "legacy":
@@ -1815,7 +1847,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func show_map() -> void:
 	if not session.exploration_unlocked():
-		notify("The galaxy opens after the campaign, or through Skip campaign.")
+		notify(tr("The galaxy opens after the campaign, or through Skip campaign."))
 		return
 	screen = "map"
 	clear_page(true)
@@ -1870,7 +1902,7 @@ func travel_selected() -> void:
 		return
 	if not destination_panel.current_quote():
 		destination_panel.travel_button.disabled = true
-		destination_panel.show_notice("Travel costs have changed. Reopen this destination to review them.")
+		destination_panel.show_notice(tr("Travel costs have changed. Reopen this destination to review them."))
 		return
 	travel_transition = preload("res://src/presentation/travel_transition.gd").new()
 	ui.add_child(travel_transition)
@@ -1883,7 +1915,7 @@ func commit_travel(pilot, panel) -> void:
 		return
 	if not panel.current_quote():
 		panel.travel_button.disabled = true
-		panel.show_notice("Travel costs have changed. Reopen this destination to review them.")
+		panel.show_notice(tr("Travel costs have changed. Reopen this destination to review them."))
 		panel.actions[0].grab_focus()
 		return
 	if session.travel(panel.destination):
@@ -1891,7 +1923,7 @@ func commit_travel(pilot, panel) -> void:
 		# Report storage failures on the destination screen that remains visible.
 		save_game(false)
 	else:
-		panel.show_notice("Travel is unavailable. Check your credits and active mission.")
+		panel.show_notice(tr("Travel is unavailable. Check your credits and active mission."))
 		panel.actions[0].grab_focus()
 
 
@@ -1903,7 +1935,7 @@ func show_market(section: String = "ship") -> void:
 	if menu_scene.configure(library, session.station_id, session.ship_id, session.market_offers()):
 		showcase.hide()
 	else:
-		notify("Unable to display supplied Hangar: " + menu_scene.error)
+		notify(tr("Unable to display supplied Hangar: %s") % menu_scene.error)
 		menu_scene.hide()
 		menu_scene.queue_free()
 		menu_scene = null
@@ -1945,7 +1977,7 @@ func save_hangar_hint(role: String) -> void:
 		history.append(role)
 	file.set_value(library.id, "acknowledged", history)
 	if file.save(hangar_hint_path()) != OK:
-		notify("Unable to remember the acknowledged Hangar hint.")
+		notify(tr("Unable to remember the acknowledged Hangar hint."))
 
 
 func hangar_transaction(action: String, entry: Dictionary) -> void:
@@ -1964,7 +1996,7 @@ func hangar_transaction(action: String, entry: Dictionary) -> void:
 		hangar_panel.refresh()
 		save_game(false)
 	else:
-		hangar_panel.show_notice(session.error if not session.error.is_empty() else "This action is unavailable.")
+		hangar_panel.show_notice(session.error if not session.error.is_empty() else tr("This action is unavailable."))
 
 
 func show_options() -> void:
@@ -1993,7 +2025,7 @@ func show_options() -> void:
 		return
 	# Settings before an archive is installed cannot use its artwork or labels.
 	var box := column(650)
-	caption("Options & controls", "Mouse + keyboard, controller and touch flight.", box)
+	caption(tr("Options & controls"), tr("Mouse + keyboard, controller and touch flight."), box)
 	var option_keys := ["music", "invert", "original_flight_controls", "aim_assist", "linked_fire", "touch", "flight_overlays", "extra_flight_buttons"]
 	if ready_content:
 		option_keys.insert(3, "targeting_reticle")
@@ -2001,20 +2033,20 @@ func show_options() -> void:
 		var check := CheckButton.new()
 		check.text = (
 			{
-				"music": "Music",
-				"invert": "Invert pitch",
-				"original_flight_controls": "Original flight controls",
-				"aim_assist": "Aim assistance",
-				"linked_fire": "Fire all mounted primary weapons together",
-				"touch": "Show touch controls",
-				"flight_overlays": "Show flight text overlays",
-				"extra_flight_buttons": "Show extra flight buttons"
+				"music": tr("Music"),
+				"invert": tr("Invert pitch"),
+				"original_flight_controls": tr("Original flight controls"),
+				"aim_assist": tr("Aim assistance"),
+				"linked_fire": tr("Fire all mounted primary weapons together"),
+				"touch": tr("Show touch controls"),
+				"flight_overlays": tr("Show flight text overlays"),
+				"extra_flight_buttons": tr("Show extra flight buttons")
 			}
 			. get(key, "")
 		)
 		if key == "targeting_reticle":
 			check.text = library.text(int(library.content.flight_ui.radar.lead.option_text))
-			check.tooltip_text = "Show where to aim ahead of a moving target."
+			check.tooltip_text = tr("Show where to aim ahead of a moving target.")
 		check.button_pressed = (
 			bool(library.content.flight_ui.radar.lead.enabled)
 			if key == "targeting_reticle" and settings[key] == null
@@ -2030,7 +2062,7 @@ func show_options() -> void:
 				if key == "music":
 					music.volume_db = -17 if value else -80
 		)
-	paragraph("Mouse sensitivity", box)
+	paragraph(tr("Mouse sensitivity"), box)
 	var sensitivity := HSlider.new()
 	sensitivity.min_value = .0005
 	sensitivity.max_value = .008
@@ -2042,8 +2074,13 @@ func show_options() -> void:
 			settings.sensitivity = value
 			save_settings()
 	)
+	button(
+		tr("Interface language: %s") % EngineLanguage.choice_name(str(settings.engine_language), str(settings.content_language)),
+		func(): change_option("engine_language", EngineLanguage.next_choice(str(settings.engine_language))),
+		box
+	)
 	paragraph(controls_help(), box)
-	button("Back", close_options, box)
+	button(tr("Back"), close_options, box)
 
 
 func close_options() -> void:
@@ -2058,7 +2095,7 @@ func close_options() -> void:
 
 func change_option(key: String, value: Variant) -> void:
 	if key == "calibrate_motion":
-		if motion_sensor.calibrate(): notify("Motion steering centered. Hold this position when resuming flight.")
+		if motion_sensor.calibrate(): notify(tr("Motion steering centered. Hold this position when resuming flight."))
 		return
 	if key == "motion_steering" and value == true: motion_sensor.enable()
 	if key == "language" and value is String and ready_content:
@@ -2066,10 +2103,21 @@ func change_option(key: String, value: Variant) -> void:
 			notify(library.error)
 			return
 		settings.language = value
-		if is_instance_valid(options_panel):
-			options_panel.values.language = value
-			options_panel.show_section(options_panel.section, "language")
-		refresh_text_font("language")
+		var engine_before := EngineLanguage.current
+		follow_game_language()
+		if EngineLanguage.current != engine_before:
+			refresh_engine_text("language")
+		else:
+			if is_instance_valid(options_panel):
+				options_panel.values.language = value
+				options_panel.show_section(options_panel.section, "language")
+			refresh_text_font("language")
+	elif key == "engine_language" and value is String and (value == EngineLanguage.AUTO or value in EngineLanguage.codes()):
+		settings.engine_language = value
+		save_settings()
+		apply_engine_language()
+		refresh_engine_text("engine_language")
+		return
 	elif key == "fullscreen" and value is bool:
 		DisplaySettings.set_fullscreen(get_window(), value)
 		settings.fullscreen = value
@@ -2096,6 +2144,78 @@ func change_option(key: String, value: Variant) -> void:
 	else:
 		return
 	save_settings()
+
+
+func apply_engine_language() -> void:
+	var setting := str(settings.engine_language)
+	EngineLanguage.apply(
+		EngineLanguage.resolve(
+			EngineLanguage.AUTO if setting.is_empty() else setting, str(settings.content_language)
+		)
+	)
+	# Fonts made for the previous language may lack the new one's fallbacks,
+	# and its letters decide whether the imported glyphs can write it.
+	BitmapFont.desktop_fonts.clear()
+	library.scalable_text_cache = -1
+
+
+func follow_game_language() -> void:
+	## Auto engine text follows the game text. A fan translation may keep the
+	## gb file name, so the text itself is read.
+	var detected := EngineLanguage.content_language(library.language_code, Array(library.strings))
+	if detected != str(settings.content_language):
+		settings.content_language = detected
+		save_settings()
+	apply_engine_language()
+
+
+func refresh_engine_text(focus_key: String) -> void:
+	## Screens keep the text they were built with; rebuild the open ones.
+	apply_static_text()
+	if is_instance_valid(hud):
+		hud.apply_text_font()
+	if screen == "options":
+		var section: String = options_panel.section if is_instance_valid(options_panel) else "options"
+		show_options()
+		if is_instance_valid(options_panel):
+			options_panel.show_section(section, focus_key)
+
+
+func language_question_choices() -> Array:
+	## [system language, game language] when a first start should ask which
+	## one the engine text uses; empty when they agree or the player chose.
+	if not ready_content or not str(settings.engine_language).is_empty():
+		return []
+	var system := EngineLanguage.supported(OS.get_locale())
+	var game := EngineLanguage.resolve(EngineLanguage.AUTO, str(settings.content_language))
+	if system.is_empty() or system == game:
+		return []
+	return [system, game]
+
+
+func language_question_text(code: String) -> String:
+	return EngineLanguage.text_in(code, "Which language should this remake's own menus and messages use? You can change it later under Options.")
+
+
+func answer_language_question(system: bool) -> void:
+	var choices := language_question_choices()
+	if choices.is_empty():
+		show_title()
+		return
+	settings.engine_language = EngineLanguage.AUTO
+	if system:
+		# A game that includes the system language switches its text as well;
+		# otherwise only the engine text follows the system.
+		var ipa_code := "gb" if choices[0] == "en" else str(choices[0])
+		if library.available_languages().has(ipa_code) and library.set_language(ipa_code):
+			settings.language = ipa_code
+			follow_game_language()
+		else:
+			settings.engine_language = choices[0]
+	save_settings()
+	apply_engine_language()
+	apply_static_text()
+	show_title()
 
 
 func refresh_text_font(focus_key: String) -> void:
@@ -2238,8 +2358,8 @@ func _process(delta: float) -> void:
 			return
 		flight_objective.text = hud.status_text()
 		flight_stats.text = (
-			"%d m/s    ×%d    %s"
-			% [flight.speed, flight.time_factor, "Autopilot" if flight.auto_pilot else "Manual"]
+			tr("%d m/s    ×%d    %s")
+			% [flight.speed, flight.time_factor, tr("Autopilot") if flight.auto_pilot else tr("Manual")]
 		)
 		update_tutorial_controls()
 		dialogue_panel.present(session.radio_cue())
@@ -2488,11 +2608,11 @@ func acknowledge_arrival_notice(_index: int = 0) -> void:
 
 
 func controls_help() -> String:
-	var other := "W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nP · Action freeze    Esc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses."
-	other += "\nOriginal flight controls enables reconstructed iPhone-style agility, inertia and banking. Mouse input is adapted. Off uses the previous remake controls."
-	other += "\nInvert reverses mouse, controller and touch Y. Arrow keys keep their direction."
-	var touch := "Touch: use the stick to steer. Touch nearby in the lower-left area to place the pad there until you release it. Drag the remaining open view to look around. Release to return the camera forward. Slide the right-edge throttle to set cruise speed. Tap Boost for a burst. Hold Fire to shoot; double-tap Fire to enable autofire. Tap Fire once to stop. AUTO appears on the fire button while enabled. Pausing clears autofire.\n\nNavigation engages autopilot. Speedup appears beside it during safe travel; Dock appears near an eligible station. In joystick mode, steering, throttle, Boost and firing return to manual flight at normal time."
-	touch += "\n\nMotion steering disables the joystick. Autopilot stays engaged while you move the phone; tap Navigation again to steer manually. Throttle, Boost and firing return time to normal while keeping autopilot engaged. Normal arrival stops and mission control still apply."
+	var other := tr("W / S · Throttle    A / D · Strafe\nMouse or arrow keys · Steer\nClick or Space · Fire    Shift · Boost\nQ · Next weapon    F · Missiles\nR · Autopilot    T · Time acceleration\nE · Dock    C · Camera    Tab · Release mouse\nP · Action freeze    Esc · Pause    F5 · Save    F11 · Fullscreen\n\nController: right stick aims, left stick strafes, D-pad sets throttle, RT fires, LT launches missiles, X switches weapons, Y docks, LB autopilot, RB time, Start pauses.")
+	other += tr("\nOriginal flight controls enables reconstructed iPhone-style agility, inertia and banking. Mouse input is adapted. Off uses the previous remake controls.")
+	other += tr("\nInvert reverses mouse, controller and touch Y. Arrow keys keep their direction.")
+	var touch := tr("Touch: use the stick to steer. Touch nearby in the lower-left area to place the pad there until you release it. Drag the remaining open view to look around. Release to return the camera forward. Slide the right-edge throttle to set cruise speed. Tap Boost for a burst. Hold Fire to shoot; double-tap Fire to enable autofire. Tap Fire once to stop. AUTO appears on the fire button while enabled. Pausing clears autofire.\n\nNavigation engages autopilot. Speedup appears beside it during safe travel; Dock appears near an eligible station. In joystick mode, steering, throttle, Boost and firing return to manual flight at normal time.")
+	touch += tr("\n\nMotion steering disables the joystick. Autopilot stays engaged while you move the phone; tap Navigation again to steer manually. Throttle, Boost and firing return time to normal while keeping autopilot engaged. Normal arrival stops and mission control still apply.")
 	return touch + "\n\n" + other if settings.touch else other + "\n\n" + touch
 
 
@@ -2593,10 +2713,10 @@ func export_saves() -> void:
 	var filename := "Galaxy-on-Fire-saves.gofsave"
 	if OS.has_feature("web"):
 		JavaScriptBridge.download_buffer(JSON.stringify(pending_save_export).to_utf8_buffer(), filename, "application/json")
-		notify("Save export downloaded.")
+		notify(tr("Save export downloaded."))
 	else:
 		save_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-		save_dialog.title = "Export saves"
+		save_dialog.title = tr("Export saves")
 		save_dialog.current_file = filename
 		save_dialog.popup_centered(Vector2i(950, 650))
 
@@ -2606,7 +2726,7 @@ func import_saves() -> void:
 		save_picker.choose()
 	else:
 		save_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-		save_dialog.title = "Import saves"
+		save_dialog.title = tr("Import saves")
 		save_dialog.current_file = ""
 		save_dialog.popup_centered(Vector2i(950, 650))
 
@@ -2615,7 +2735,7 @@ func save_file_selected(path: String) -> void:
 	if save_dialog.file_mode == FileDialog.FILE_MODE_OPEN_FILE:
 		review_save_import(path)
 	else:
-		if save_transfer.write(path, pending_save_export): notify("Saves exported.")
+		if save_transfer.write(path, pending_save_export): notify(tr("Saves exported."))
 		else: notify(save_transfer.error)
 
 
@@ -2626,8 +2746,8 @@ func review_save_import(path: String) -> void:
 		return
 	var slots: Array[String] = []
 	for filename in bundle.saves:
-		slots.append({"campaign.json": "Campaign", "free.json": "Exploration", "survival-state.json": "Survival and local scores"}[filename])
-	confirm("Import saves?", "Replace these local saves with the selected export: %s. A backup of your existing saves will be kept." % ", ".join(slots), install_save_import.bind(bundle))
+		slots.append({"campaign.json": tr("Campaign"), "free.json": tr("Exploration"), "survival-state.json": tr("Survival and local scores")}[filename])
+	confirm(tr("Import saves?"), tr("Replace these local saves with the selected export: %s. A backup of your existing saves will be kept.") % ", ".join(slots), install_save_import.bind(bundle))
 
 
 func install_save_import(bundle: Dictionary) -> void:
@@ -2639,4 +2759,4 @@ func install_save_import(bundle: Dictionary) -> void:
 	survival_archive = null
 	defeated_session = null
 	show_title_menu("load")
-	notify("Saves imported. Choose a pilot to continue, or open Survival.")
+	notify(tr("Saves imported. Choose a pilot to continue, or open Survival."))

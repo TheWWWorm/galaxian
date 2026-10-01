@@ -14,21 +14,21 @@ func validate(library, value: Variant) -> Dictionary:
 		or value.get("format") != "gof-native-save"
 		or value.get("version") != 1
 	):
-		error = "This is not a supported remake save export."
+		error = tr("This is not a supported remake save export.")
 		return {}
 	if value.get("content_id") != library.id:
-		error = "This save belongs to a different game archive. Import the same IPA on both devices first."
+		error = tr("This save belongs to a different game archive. Import the same IPA on both devices first.")
 		return {}
 	if (
 		not value.get("saves") is Dictionary
 		or value.saves.is_empty()
 		or value.saves.size() > FILES.size()
 	):
-		error = "The export contains no supported saves."
+		error = tr("The export contains no supported saves.")
 		return {}
 	for filename in value.saves:
 		if filename not in FILES:
-			error = "The export contains an unsupported save entry."
+			error = tr("The export contains an unsupported save entry.")
 			return {}
 		var snapshot: Variant = value.saves[filename]
 		if filename == Survival.FILE_NAME:
@@ -36,14 +36,14 @@ func validate(library, value: Variant) -> Dictionary:
 			archive.library = library
 			archive.declarations = library.content.survival
 			if archive.decode(snapshot).is_empty():
-				error = "The survival save is invalid or incompatible."
+				error = tr("The survival save is invalid or incompatible.")
 				return {}
 		else:
 			var slot: String = filename.get_basename()
 			var pilot := Session.new()
 			pilot.configure(library, slot == "free")
 			if not pilot.restore(snapshot) or pilot.slot != slot:
-				error = "The %s save is invalid or incompatible." % slot
+				error = tr("The %s save is invalid or incompatible.") % slot
 				return {}
 	return value.duplicate(true)
 
@@ -51,7 +51,7 @@ func validate(library, value: Variant) -> Dictionary:
 func read_export(library, path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null or file.get_length() > MAX_BYTES:
-		error = "The save export cannot be read or exceeds 16 MiB."
+		error = tr("The save export cannot be read or exceeds 16 MiB.")
 		return {}
 	return validate(library, JSON.parse_string(file.get_as_text()))
 
@@ -70,7 +70,7 @@ func collect(library, directory: String) -> Dictionary:
 			"saves": {filename: value}
 		}
 		if validate(library, record).is_empty():
-			error = "Cannot export %s: %s" % [filename, error]
+			error = tr("Cannot export %s: %s") % [filename, error]
 			return {}
 		saves[filename] = value
 	return validate(
@@ -82,18 +82,18 @@ func collect(library, directory: String) -> Dictionary:
 func write(path: String, value: Dictionary) -> bool:
 	var text := JSON.stringify(value)
 	if text.to_utf8_buffer().size() > MAX_BYTES:
-		error = "The save export exceeds 16 MiB."
+		error = tr("The save export exceeds 16 MiB.")
 		return false
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		error = "Could not write the save export."
+		error = tr("Could not write the save export.")
 		return false
 	file.store_string(text)
 	file.flush()
 	var ok := file.get_error() == OK
 	file.close()
 	if not ok:
-		error = "Could not finish writing the save export."
+		error = tr("Could not finish writing the save export.")
 	return ok
 
 
@@ -101,7 +101,7 @@ func install(library, directory: String, value: Dictionary) -> bool:
 	if validate(library, value).is_empty():
 		return false
 	if directory.get_file() != library.id:
-		error = "Save destination does not match the game archive."
+		error = tr("Save destination does not match the game archive.")
 		return false
 	# Stage a complete sibling directory. Preserve every previous file in a
 	# timestamped backup; either all imported slots become visible or none do.
@@ -109,7 +109,7 @@ func install(library, directory: String, value: Dictionary) -> bool:
 	var staging := directory + ".import-" + suffix
 	var backup := directory + ".before-import-" + suffix
 	if DirAccess.make_dir_recursive_absolute(staging) != OK:
-		error = "Could not stage the imported saves."
+		error = tr("Could not stage the imported saves.")
 		return false
 	if DirAccess.dir_exists_absolute(directory):
 		for filename in DirAccess.get_files_at(directory):
@@ -117,7 +117,7 @@ func install(library, directory: String, value: Dictionary) -> bool:
 				DirAccess.copy_absolute(directory.path_join(filename), staging.path_join(filename))
 				!= OK
 			):
-				error = "Could not preserve existing saves."
+				error = tr("Could not preserve existing saves.")
 				remove_staging(staging)
 				return false
 	for filename in value.saves:
@@ -130,13 +130,13 @@ func install(library, directory: String, value: Dictionary) -> bool:
 			return false
 	var had_directory := DirAccess.dir_exists_absolute(directory)
 	if had_directory and DirAccess.rename_absolute(directory, backup) != OK:
-		error = "Could not back up existing saves."
+		error = tr("Could not back up existing saves.")
 		remove_staging(staging)
 		return false
 	if DirAccess.rename_absolute(staging, directory) != OK:
 		if had_directory:
 			DirAccess.rename_absolute(backup, directory)
-		error = "Could not finish importing saves."
+		error = tr("Could not finish importing saves.")
 		remove_staging(staging)
 		return false
 	return true

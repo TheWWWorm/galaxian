@@ -133,7 +133,7 @@ func skip_campaign() -> void:
 
 func complete_campaign() -> bool:
 	if campaign_state != "active" or not terminal_chapter(chapter) or not ready_to_finish():
-		error = "Finish the final mission and its closing transmission first."
+		error = tr("Finish the final mission and its closing transmission first.")
 		return false
 	return finish_mission()
 
@@ -186,10 +186,10 @@ func begin_training() -> bool:
 
 func begin_mission() -> bool:
 	if campaign_state != "active" or not docked or not mission_available():
-		error = "This campaign mission is not available yet."
+		error = tr("This campaign mission is not available yet.")
 		return false
 	if loadout.weapons().is_empty():
-		error = "Fit a weapon before starting this mission."
+		error = tr("Fit a weapon before starting this mission.")
 		return false
 	remember_checkpoint("station")
 	active_job = Mission.create(
@@ -451,15 +451,15 @@ func build_contract_encounter(reference: Variant, level: int, root_seed: int) ->
 
 func begin_contract(index: int) -> bool:
 	if not docked or not exploration_unlocked() or not active_job.is_empty():
-		error = "Contracts are available at stations after completing or skipping the campaign."
+		error = tr("Contracts are available at stations after completing or skipping the campaign.")
 		return false
 	var reference := contract_reference(index)
 	var definition := build_contract(reference, rank(), market_seed)
 	if definition.is_empty() or contract_paid(reference):
-		error = "This contract is unavailable."
+		error = tr("This contract is unavailable.")
 		return false
 	if definition.success.kind != "route_finished" and loadout.weapons().is_empty():
-		error = "Fit a weapon before accepting this contract."
+		error = tr("Fit a weapon before accepting this contract.")
 		return false
 	remember_checkpoint("station")
 	_contract_definition = definition
@@ -484,7 +484,7 @@ func begin_contract(index: int) -> bool:
 
 
 func begin_patrol() -> bool:
-	error = "Choose a contract from the station board."
+	error = tr("Choose a contract from the station board.")
 	return false
 
 
@@ -685,18 +685,18 @@ func market_offers() -> Array:
 func ship_offer_quote(index: int) -> Dictionary:
 	var offers := market_offers()
 	if not docked or index < 0 or index >= offers.size():
-		error = "This offer is no longer available."
+		error = tr("This offer is no longer available.")
 		return {}
 	var offer: Dictionary = offers[index]
 	if offer.kind != "ship" or int(offer.count) <= 0:
-		error = "This ship is no longer available."
+		error = tr("This ship is no longer available.")
 		return {}
 	var transfer := loadout.ship_exchange(int(offer.id), cargo_used() - loadout.hold.size())
 	var reason := ""
 	if int(offer.id) == ship_id:
-		reason = "You already fly this ship model."
+		reason = tr("You already fly this ship model.")
 	elif credits + ship_value < int(offer.price):
-		reason = "Not enough credits after trading in your ship."
+		reason = tr("Not enough credits after trading in your ship.")
 	elif transfer.is_empty():
 		reason = loadout.error
 	error = reason
@@ -721,7 +721,7 @@ func buy_ship_quote(reviewed: Dictionary) -> bool:
 	if fresh.is_empty():
 		return false
 	if fresh != reviewed:
-		error = "The ship offer or your inventory changed. Review the exchange again."
+		error = tr("The ship offer or your inventory changed. Review the exchange again.")
 		return false
 	return buy_offer(int(fresh.index))
 
@@ -730,7 +730,7 @@ func buy_offer(index: int) -> bool:
 	error = ""
 	var offers := market_offers()
 	if not docked or index < 0 or index >= offers.size() or int(offers[index].count) <= 0:
-		error = "This offer is no longer available."
+		error = tr("This offer is no longer available.")
 		return false
 	var offer: Dictionary = offers[index]
 	var price := int(offer.price)
@@ -747,10 +747,10 @@ func buy_offer(index: int) -> bool:
 		hull = max_hull()
 	else:
 		if credits < price:
-			error = "Not enough credits."
+			error = tr("Not enough credits.")
 			return false
 		if cargo_used() >= cargo_capacity():
-			error = "The cargo hold is full."
+			error = tr("The cargo hold is full.")
 			return false
 		credits -= price
 		if offer.kind == "cargo":
@@ -786,7 +786,7 @@ func sell_equipment(index: int) -> bool:
 func sell_cargo(item: int, amount: int = 1) -> bool:
 	var key := str(item)
 	if not docked or not library.station_definition(station_id).shop or amount <= 0 or amount > int(cargo.get(key, 0)):
-		error = "The selected cargo quantity is unavailable."
+		error = tr("The selected cargo quantity is unavailable.")
 		return false
 	var price := Market.cargo_price(library, item, station_id)
 	credits += price * amount
@@ -935,7 +935,7 @@ func restore(value: Variant) -> bool:
 		value.schema = 20
 		if value.get("active_job") is Dictionary and not value.active_job.is_empty():
 			if not Mission.Destruction.migrate_actors(value.active_job.get("actors")):
-				error = "Invalid legacy actor destruction state."
+				error = tr("Invalid legacy actor destruction state.")
 				return false
 
 	if value is Dictionary and value.get("schema") == 20:
@@ -943,7 +943,7 @@ func restore(value: Variant) -> bool:
 		value.schema = 21
 		if value.get("active_job") is Dictionary and not value.active_job.is_empty():
 			if not Mission.Destruction.migrate_motion(value.active_job.get("actors")):
-				error = "Invalid legacy actor momentum."
+				error = tr("Invalid legacy actor momentum.")
 				return false
 
 	if value is Dictionary and value.get("schema") == 21:
@@ -951,7 +951,7 @@ func restore(value: Variant) -> bool:
 		value.schema = 22
 		if value.get("active_job") is Dictionary and not value.active_job.is_empty():
 			if not Mission.Evasion.migrate(value.active_job.get("actors")):
-				error = "Invalid legacy fighter maneuver state."
+				error = tr("Invalid legacy fighter maneuver state.")
 				return false
 
 	if value is Dictionary and value.get("schema") == 22:
@@ -964,7 +964,7 @@ func restore(value: Variant) -> bool:
 		value.schema = 24
 		if value.get("active_job") is Dictionary and not value.active_job.is_empty():
 			if not Mission.Frame.migrate(value.active_job.get("actors")):
-				error = "Invalid legacy fighter orientation."
+				error = tr("Invalid legacy fighter orientation.")
 				return false
 
 	if value is Dictionary and value.get("schema") == 24:
@@ -972,7 +972,7 @@ func restore(value: Variant) -> bool:
 		value.schema = 25
 		if value.get("active_job") is Dictionary and not value.active_job.is_empty():
 			if not Mission.Impact.migrate(value.active_job.get("actors")):
-				error = "Invalid legacy fighter impact state."
+				error = tr("Invalid legacy fighter impact state.")
 				return false
 
 	if value is Dictionary and value.get("schema") == 25:
@@ -980,7 +980,7 @@ func restore(value: Variant) -> bool:
 		value.schema = 26
 		if value.get("active_job") is Dictionary and not value.active_job.is_empty():
 			if not Mission.Targeting.migrate(value.active_job.get("actors")):
-				error = "Invalid legacy fighter targeting state."
+				error = tr("Invalid legacy fighter targeting state.")
 				return false
 
 	if value is Dictionary and value.get("schema") == 26:
@@ -1015,20 +1015,20 @@ func restore(value: Variant) -> bool:
 		or value.get("schema") != SCHEMA
 		or value.get("content_id") != content_id
 	):
-		error = "This save does not match the installed content."
+		error = tr("This save does not match the installed content.")
 		return false
 	if not PilotStatistics.valid(value.get("statistics")):
-		error = "Invalid saved pilot statistics."
+		error = tr("Invalid saved pilot statistics.")
 		return false
 	if (
 		not Travel.integer(value.get("rating"))
 		or value.rating < library.content.travel.rating_min
 		or value.rating > library.content.travel.rating_max
 	):
-		error = "Invalid saved faction rating."
+		error = tr("Invalid saved faction rating.")
 		return false
 	if not Motion.valid(value.get("motion"), motion_parameters()):
-		error = "Invalid saved player movement."
+		error = tr("Invalid saved player movement.")
 		return false
 	if not value.has_all(
 		[
@@ -1060,7 +1060,7 @@ func restore(value: Variant) -> bool:
 			"credit_notices"
 		]
 	):
-		error = "Incomplete save."
+		error = tr("Incomplete save.")
 		return false
 	if (
 		not value.get("recovery") is Dictionary
@@ -1069,22 +1069,22 @@ func restore(value: Variant) -> bool:
 			and not Recovery.valid_result(value.recovery, library.content.recovery)
 		)
 	):
-		error = "Invalid cargo recovery receipt."
+		error = tr("Invalid cargo recovery receipt.")
 		return false
 	if not ExplorationArea.valid(library, value.get("exploration")):
-		error = "Invalid saved exploration field."
+		error = tr("Invalid saved exploration field.")
 		return false
 	if not valid_credit_notices(value.get("credit_notices")):
-		error = "Invalid saved arrival notice record."
+		error = tr("Invalid saved arrival notice record.")
 		return false
 	if not value.active_job is Dictionary:
-		error = "Invalid mission structure."
+		error = tr("Invalid mission structure.")
 		return false
 	if (
 		value.campaign_state not in ["active", "skipped", "completed"]
 		or value.slot not in ["campaign", "free"]
 	):
-		error = "Invalid campaign state."
+		error = tr("Invalid campaign state.")
 		return false
 	for field in [
 		"chapter",
@@ -1096,16 +1096,16 @@ func restore(value: Variant) -> bool:
 		"market_generation"
 	]:
 		if not number(value[field]) or value[field] < 0 or int(value[field]) != value[field]:
-			error = "Invalid save field: " + field
+			error = tr("Invalid save field: %s") % field
 			return false
 	if not Loadout.integer(value.weapon_id) or value.weapon_id < -1:
-		error = "Invalid weapon reference."
+		error = tr("Invalid weapon reference.")
 		return false
 	if value.chapter > library.playable_chapter_count():
-		error = "This preview cannot load a later campaign save."
+		error = tr("This preview cannot load a later campaign save.")
 		return false
 	if not Progression.valid(value.progression, int(value.chapter), library):
-		error = "Invalid earned-worth history."
+		error = tr("Invalid earned-worth history.")
 		return false
 	if (
 		(
@@ -1123,10 +1123,10 @@ func restore(value: Variant) -> bool:
 		or (value.campaign_state == "skipped" and value.slot != "free")
 		or (value.campaign_state == "active" and value.slot != "campaign")
 	):
-		error = "Campaign state and recorded completion disagree."
+		error = tr("Campaign state and recorded completion disagree.")
 		return false
 	if not Loadout.integer(value.briefing_page) or value.briefing_page < -1:
-		error = "Invalid briefing page."
+		error = tr("Invalid briefing page.")
 		return false
 	if (
 		value.briefing_page >= 0
@@ -1137,7 +1137,7 @@ func restore(value: Variant) -> bool:
 			or library.briefing_cue(int(value.chapter), int(value.briefing_page)).is_empty()
 		)
 	):
-		error = "Briefing does not match the docked campaign pilot."
+		error = tr("Briefing does not match the docked campaign pilot.")
 		return false
 	if (
 		not Contracts.valid_receipts(
@@ -1145,7 +1145,7 @@ func restore(value: Variant) -> bool:
 		)
 		or (value.campaign_state == "active" and not value.contract_rewards.is_empty())
 	):
-		error = "Invalid freelance payment history."
+		error = tr("Invalid freelance payment history.")
 		return false
 	var expected_status := Progression.status(value.progression, library)
 	for receipt in value.contract_rewards:
@@ -1156,7 +1156,7 @@ func restore(value: Variant) -> bool:
 		or value.ship_id >= library.ships.size()
 		or value.weapon_id >= library.items.size()
 	):
-		error = "Invalid catalogue reference."
+		error = tr("Invalid catalogue reference.")
 		return false
 	if (
 		not value.docked is bool
@@ -1164,19 +1164,19 @@ func restore(value: Variant) -> bool:
 		or not value.visited is Array
 		or not value.active_job is Dictionary
 	):
-		error = "Invalid save structure."
+		error = tr("Invalid save structure.")
 		return false
 	for key in ["hull", "shield", "elapsed"]:
 		if not number(value[key]) or value[key] < 0:
-			error = "Invalid flight state."
+			error = tr("Invalid flight state.")
 			return false
 	for key in ["position", "rotation"]:
 		if not value[key] is Array or value[key].size() != 3:
-			error = "Invalid coordinates."
+			error = tr("Invalid coordinates.")
 			return false
 		for c in value[key]:
 			if not number(c) or absf(c) > 1e8:
-				error = "Invalid coordinates."
+				error = tr("Invalid coordinates.")
 				return false
 	var total := 0
 	for key in value.cargo:
@@ -1189,14 +1189,14 @@ func restore(value: Variant) -> bool:
 			or value.cargo[key] < 0
 			or value.cargo[key] != int(value.cargo[key])
 		):
-			error = "Invalid cargo."
+			error = tr("Invalid cargo.")
 			return false
 		if int(library.items[int(key)][1]) != library.CARGO_CATEGORY:
-			error = "Invalid cargo category."
+			error = tr("Invalid cargo category.")
 			return false
 		total += int(value.cargo[key])
 	if total > int(library.ships[int(value.ship_id)][5]):
-		error = "Cargo exceeds capacity."
+		error = tr("Cargo exceeds capacity.")
 		return false
 	var candidate := Loadout.new()
 	candidate.configure(library)
@@ -1209,13 +1209,13 @@ func restore(value: Variant) -> bool:
 		or value.hull > int(library.ships[int(value.ship_id)][4])
 		or value.shield > candidate.shield_capacity()
 	):
-		error = "Equipment and ship state disagree."
+		error = tr("Equipment and ship state disagree.")
 		return false
 	if (
 		not valid_markets(value.markets)
 		or value.ship_value > int(library.ships[int(value.ship_id)][6])
 	):
-		error = "Invalid saved market state."
+		error = tr("Invalid saved market state.")
 		return false
 	var seen_stations := {}
 	for sid in value.visited:
@@ -1226,15 +1226,15 @@ func restore(value: Variant) -> bool:
 			or sid != int(sid)
 			or seen_stations.has(int(sid))
 		):
-			error = "Invalid visited station."
+			error = tr("Invalid visited station.")
 			return false
 		seen_stations[int(sid)] = true
 	if value.campaign_state == "active" and not value.exploration.is_empty():
-		error = "Exploration fields cannot precede campaign completion or skipping."
+		error = tr("Exploration fields cannot precede campaign completion or skipping.")
 		return false
 	for key in value.exploration:
 		if not seen_stations.has(int(key)):
-			error = "Saved exploration field belongs to an unvisited station."
+			error = tr("Saved exploration field belongs to an unvisited station.")
 			return false
 	var definition: Dictionary = library.mission_definition(int(value.chapter))
 	var contract: bool = value.active_job.get("kind") == "contract"
@@ -1248,23 +1248,23 @@ func restore(value: Variant) -> bool:
 			or value.active_job.contract.station != value.station_id
 			or value.active_job.contract.visit != value.market_generation
 		):
-			error = "Invalid active contract reference."
+			error = tr("Invalid active contract reference.")
 			return false
 		for receipt in value.contract_rewards:
 			if (
 				Contracts.reference_key(receipt.reference)
 				== Contracts.reference_key(value.active_job.contract)
 			):
-				error = "This contract was already paid."
+				error = tr("This contract was already paid.")
 				return false
 		if (
 			value.active_job.get("seed")
 			!= Contracts.encounter_seed(int(value.market_seed), value.active_job.contract)
 		):
-			error = "Contract encounter seed does not match its offer."
+			error = tr("Contract encounter seed does not match its offer.")
 			return false
 	if not value.active_job.get("actors", []) is Array:
-		error = "Invalid saved actor list."
+		error = tr("Invalid saved actor list.")
 		return false
 	if migrate_fighter_motion and not value.active_job.is_empty():
 		if (
@@ -1273,7 +1273,7 @@ func restore(value: Variant) -> bool:
 				value.active_job.actors, library.content.fighter_motion, definition.groups
 			)
 		):
-			error = "Invalid legacy fighter speed state."
+			error = tr("Invalid legacy fighter speed state.")
 			return false
 
 	var combat_profiles: Dictionary = (
@@ -1291,7 +1291,7 @@ func restore(value: Variant) -> bool:
 			and (not value.combat.projectiles.is_empty() or not value.combat.cooldowns.is_empty())
 		)
 	):
-		error = "Invalid projectile or weapon cooldown state."
+		error = tr("Invalid projectile or weapon cooldown state.")
 		return false
 	if not value.active_job.is_empty():
 		if (
@@ -1319,7 +1319,7 @@ func restore(value: Variant) -> bool:
 				expected_rank
 			)
 		):
-			error = "Invalid mission state."
+			error = tr("Invalid mission state.")
 			return false
 
 	if migrate_rating:
@@ -1573,7 +1573,7 @@ func save(path: String) -> bool:
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
 	var f := FileAccess.open(path + ".tmp", FileAccess.WRITE)
 	if f == null:
-		error = "Could not write save."
+		error = tr("Could not write save.")
 		return false
 	if docked and can_retry(): remember_checkpoint("station")
 	var payload := capture()
@@ -1582,10 +1582,10 @@ func save(path: String) -> bool:
 	f.flush()
 	f.close()
 	if FileAccess.file_exists(path) and DirAccess.copy_absolute(path, path + ".bak") != OK:
-		error = "Could not preserve the previous save."
+		error = tr("Could not preserve the previous save.")
 		return false
 	if DirAccess.rename_absolute(path + ".tmp", path) != OK:
-		error = "Could not finish save."
+		error = tr("Could not finish save.")
 		return false
 	return true
 
@@ -1620,13 +1620,13 @@ func load_retry(path: String) -> bool:
 	for suffix in ["", ".bak"]:
 		if FileAccess.file_exists(path + suffix) and restore(parse_json(path + suffix)) and can_retry():
 			return true
-	error = "No usable saved game is available."
+	error = tr("No usable saved game is available.")
 	return false
 
 
 func load_save(path: String) -> bool:
 	if not FileAccess.file_exists(path):
-		error = "No save exists in this slot."
+		error = tr("No save exists in this slot.")
 		return false
 	if restore(parse_json(path)):
 		return true

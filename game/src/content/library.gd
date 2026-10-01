@@ -8,6 +8,7 @@ const Formats = preload("res://src/content/formats.gd")
 const LIT_SHADER = preload("res://src/presentation/lit.gdshader")
 const ADDITIVE_SHADER = preload("res://src/presentation/additive.gdshader")
 const StationModel = preload("res://src/presentation/station.gd")
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
 const SHIELD_CATEGORY := 5
 const CARGO_CATEGORY := 6
 const MISSILE_CATEGORY := 3
@@ -64,14 +65,14 @@ func open(directory: String, content_id: String, language: String = "gb") -> boo
 	systems = reader.table(read("data/txt/systems.txt"), 1)
 	quadrants = reader.table(read("data/txt/quadrants.txt"), 1)
 	if ships.is_empty() or items.is_empty() or stations.is_empty() or systems.is_empty():
-		error = "Required game tables are incomplete."
+		error = tr("Required game tables are incomplete.")
 		return false
 	var parser := JSON.new()
 	if (
 		parser.parse(read("content.json").get_string_from_utf8()) != OK
 		or not parser.data is Dictionary
 	):
-		error = "Imported content definitions are missing or damaged. Import the IPA again."
+		error = tr("Imported content definitions are missing or damaged. Import the IPA again.")
 		return false
 	content = parser.data
 	if content.get("tables") is Dictionary:
@@ -142,11 +143,11 @@ static func language_name(code: String) -> String:
 
 func set_language(code: String) -> bool:
 	if not available_languages().has(code):
-		error = "This language is not included in the imported game."
+		error = tr("This language is not included in the imported game.")
 		return false
 	var localized := reader.language(read(code + ".lang"))
 	if localized.size() != strings.size():
-		error = "The selected language data is incomplete. Import the IPA again."
+		error = tr("The selected language data is incomplete. Import the IPA again.")
 		return false
 	strings = localized
 	language_code = code
@@ -160,10 +161,10 @@ func valid_menu_traffic() -> bool:
 	if not preload("res://src/presentation/menu_traffic.gd").valid_data(
 		content.get("menu_traffic"), content.tables.actor_meshes.size()
 	):
-		error = "Invalid imported menu scenery declarations. Import the IPA again."
+		error = tr("Invalid imported menu scenery declarations. Import the IPA again.")
 		return false
 	if not content.projectile_trails.styles.has(str(int(content.menu_traffic.local_trail.style))):
-		error = "Unsupported imported menu ship trail style. Import the IPA again."
+		error = tr("Unsupported imported menu ship trail style. Import the IPA again.")
 		return false
 	return true
 
@@ -172,7 +173,7 @@ func valid_fighter_steering() -> bool:
 	if not preload("res://src/simulation/encounters.gd").valid_steering(
 		content.get("fighter_steering"), content.tables.actor_meshes.size(), content.chapters.size()
 	):
-		error = "Invalid imported fighter steering. Import the IPA again."
+		error = tr("Invalid imported fighter steering. Import the IPA again.")
 		return false
 	return true
 
@@ -181,7 +182,7 @@ func valid_fighter_evasion() -> bool:
 	if not preload("res://src/simulation/fighter_evasion.gd").valid_data(
 		content.get("fighter_evasion")
 	):
-		error = "Invalid imported fighter maneuvers. Import the IPA again."
+		error = tr("Invalid imported fighter maneuvers. Import the IPA again.")
 		return false
 	return true
 
@@ -190,35 +191,35 @@ func load_contract_data() -> bool:
 	if not Contracts.valid_rules(
 		content.get("contracts"), strings.size(), content.radio_ui.portraits.size()
 	):
-		error = "Invalid imported contract rules. Import the IPA again."
+		error = tr("Invalid imported contract rules. Import the IPA again.")
 		return false
 	var rules: Dictionary = content.contracts
 	if not ContractEncounters.valid_parameters(rules.get("hunt"), self):
-		error = "Invalid imported freelance encounter parameters. Import the IPA again."
+		error = tr("Invalid imported freelance encounter parameters. Import the IPA again.")
 		return false
 	if not ContractEncounters.valid_transport_parameters(rules.get("transport"), self):
-		error = "Invalid imported transport encounter parameters. Import the IPA again."
+		error = tr("Invalid imported transport encounter parameters. Import the IPA again.")
 		return false
 	if not ContractEncounters.valid_battle_parameters(rules.get("battles"), self):
-		error = "Invalid imported combat contract parameters. Import the IPA again."
+		error = tr("Invalid imported combat contract parameters. Import the IPA again.")
 		return false
 	if not ContractEncounters.valid_capture_parameters(rules.get("capture"), self):
-		error = "Invalid imported capture contract parameters. Import the IPA again."
+		error = tr("Invalid imported capture contract parameters. Import the IPA again.")
 		return false
 	if not ContractEncounters.valid_intercept_parameters(rules.get("intercept"), self):
-		error = "Invalid imported interception contract parameters. Import the IPA again."
+		error = tr("Invalid imported interception contract parameters. Import the IPA again.")
 		return false
 	if not ContractEncounters.valid_escort_parameters(rules.get("escort"), self):
-		error = "Invalid imported escort contract parameters. Import the IPA again."
+		error = tr("Invalid imported escort contract parameters. Import the IPA again.")
 		return false
 	if not ContractEncounters.valid_asteroid_parameters(rules.get("asteroids"), self):
-		error = "Invalid imported asteroid contract parameters. Import the IPA again."
+		error = tr("Invalid imported asteroid contract parameters. Import the IPA again.")
 		return false
 	if not ContractEncounters.valid_minefield_parameters(rules.get("minefield"), self):
-		error = "Invalid imported minefield contract parameters. Import the IPA again."
+		error = tr("Invalid imported minefield contract parameters. Import the IPA again.")
 		return false
 	if not ContractEncounters.valid_clearance_parameters(rules.get("clearance"), self):
-		error = "Invalid imported clearance contract parameters. Import the IPA again."
+		error = tr("Invalid imported clearance contract parameters. Import the IPA again.")
 		return false
 	# JSON numbers arrive as floats. Godot array membership is type-sensitive;
 	# normalize declared integer arrays before name or portrait selection.
@@ -240,7 +241,7 @@ func load_contract_data() -> bool:
 		for race in choices.size():
 			choices[race] = choices[race].map(func(value): return int(value))
 	if rules.quadrant_difficulty.size() != content.tables.quadrant_difficulty.size():
-		error = "Contract region tables disagree with the galaxy."
+		error = tr("Contract region tables disagree with the galaxy.")
 		return false
 	for race in int(rules.client_race_count):
 		for gender in ["male", "female"]:
@@ -260,36 +261,36 @@ func load_contract_data() -> bool:
 
 func validate_content() -> bool:
 	if not preload("res://src/presentation/flight_effects.gd").valid(content.get("flight_effects"), content.get("materials", {}), content.get("projectile_trails", {}).get("styles", {})):
-		error = "Invalid imported flight effects. Import the IPA again."
+		error = tr("Invalid imported flight effects. Import the IPA again.")
 		return false
 	if not content.get("sound_bank", {}).has(str(int(content.flight_effects.boost_sound))):
-		error = "Missing imported boost sound. Import the IPA again."
+		error = tr("Missing imported boost sound. Import the IPA again.")
 		return false
 	if not content.get("sound_bank", {}).has(str(int(content.flight_effects.outro.music))):
-		error = "Missing imported mission completion music. Import the IPA again."
+		error = tr("Missing imported mission completion music. Import the IPA again.")
 		return false
 	if not preload("res://src/simulation/mines.gd").valid_parameters(
 		content.get("mine_behavior"),
 		content.get("resources", {}),
 		content.get("tables", {}).get("actor_hull", []).size()
 	):
-		error = "Invalid imported mine behavior. Import the IPA again."
+		error = tr("Invalid imported mine behavior. Import the IPA again.")
 		return false
 	if not preload("res://src/presentation/mine_visual.gd").valid_audio(
 		content.mine_behavior, content.get("sound_bank")
 	):
-		error = "Invalid imported mine sounds. Import the IPA again."
+		error = tr("Invalid imported mine sounds. Import the IPA again.")
 		return false
 	if not preload("res://src/simulation/flight_motion.gd").valid_parameters(
 		content.get("player_motion")
 	):
-		error = "Invalid imported player movement. Import the IPA again."
+		error = tr("Invalid imported player movement. Import the IPA again.")
 		return false
 	for ship in ships:
 		var raw_type: String = str(ship[int(content.player_motion.steering.ship_type_column)])
 		var kind := int(raw_type)
 		if not raw_type.is_valid_int() or kind < 0 or kind >= content.player_motion.steering.agilities.size():
-			error = "Unsupported player ship agility type. Import the IPA again."
+			error = tr("Unsupported player ship agility type. Import the IPA again.")
 			return false
 
 	if (
@@ -307,7 +308,7 @@ func validate_content() -> bool:
 			]
 		)
 	):
-		error = "Unsupported imported content schema."
+		error = tr("Unsupported imported content schema.")
 		return false
 	if (
 		not content_integer(content.initial.get("level"))
@@ -317,7 +318,7 @@ func validate_content() -> bool:
 		or not content_number(content.initial.get("rank_growth"))
 		or content.initial.rank_growth <= 1
 	):
-		error = "Invalid imported pilot progression parameters."
+		error = tr("Invalid imported pilot progression parameters.")
 		return false
 	var tables: Dictionary = content.tables
 	if (
@@ -325,27 +326,27 @@ func validate_content() -> bool:
 		or tables.actor_collision.size() != tables.actor_hull.size()
 		or tables.actor_collision.any(func(radius): return radius <= 0 or radius > 10000000)
 	):
-		error = "Invalid imported collision data. Import the IPA again."
+		error = tr("Invalid imported collision data. Import the IPA again.")
 		return false
 	if (
 		tables.quadrant_difficulty.is_empty()
 		or stations.size() % systems.size() != 0
 		or systems.size() % tables.quadrant_difficulty.size() != 0
 	):
-		error = "Unsupported galaxy table dimensions."
+		error = tr("Unsupported galaxy table dimensions.")
 		return false
 	if tables.buyable_ships.size() != ships.size():
-		error = "Ship catalogue and model associations disagree."
+		error = tr("Ship catalogue and model associations disagree.")
 		return false
 	if not content_integer(content.get("campaign_quadrant")):
-		error = "Missing imported campaign destination addressing."
+		error = tr("Missing imported campaign destination addressing.")
 		return false
 	for chapter in content.chapters.size():
 		if chapter_destination(chapter) < 0:
-			error = "Invalid imported campaign destination."
+			error = tr("Invalid imported campaign destination.")
 			return false
 	if not valid_missions():
-		error = "Invalid imported mission or radio definition. Import the IPA again."
+		error = tr("Invalid imported mission or radio definition. Import the IPA again.")
 		return false
 	var required_actors: Array = tables.buyable_ships.duplicate()
 	for mission in content.missions:
@@ -358,16 +359,16 @@ func validate_content() -> bool:
 			or actor >= tables.actor_meshes.size()
 			or not content.resources.has(str(int(tables.actor_meshes[int(actor)])))
 		):
-			error = "Unresolved ship model association."
+			error = tr("Unresolved ship model association.")
 			return false
 		var path: String = content.resources[str(int(tables.actor_meshes[int(actor)]))].path
 		if not FileAccess.file_exists(root.path_join(path)):
-			error = "Missing required actor model."
+			error = tr("Missing required actor model.")
 			return false
 	for resource in content.resources.values():
 		var path: String = resource.path
 		if not path.begins_with("data/meshes/") or path.contains(".."):
-			error = "Invalid registered model path."
+			error = tr("Invalid registered model path.")
 			return false
 	for pair in [["ships", ships], ["items", items]]:
 		var binding: Dictionary = content.localization[pair[0]]
@@ -377,19 +378,19 @@ func validate_content() -> bool:
 				or binding.base + index * binding.stride < 0
 				or binding.base + index * binding.stride >= strings.size()
 			):
-				error = "Unresolved catalogue localization reference."
+				error = tr("Unresolved catalogue localization reference.")
 				return false
 	for chapter in content.chapters:
 		for item_id in chapter.stock:
 			if item_id < 0 or item_id >= items.size():
-				error = "Invalid campaign shop reference."
+				error = tr("Invalid campaign shop reference.")
 				return false
 		for text_id in chapter.dialogue:
 			if text_id < 0 or text_id >= strings.size():
-				error = "Invalid campaign dialogue reference."
+				error = tr("Invalid campaign dialogue reference.")
 				return false
 		if chapter.reward < 0:
-			error = "Invalid campaign reward."
+			error = tr("Invalid campaign reward.")
 			return false
 	if (
 		content.initial.ship_index < 0
@@ -399,14 +400,14 @@ func validate_content() -> bool:
 		or content.initial.station_index < 0
 		or content.initial.station_index >= stations.size()
 	):
-		error = "Invalid initial pilot catalogue reference."
+		error = tr("Invalid initial pilot catalogue reference.")
 		return false
 	if int(items[int(content.initial.weapon_index)][1]) >= SHIELD_CATEGORY:
-		error = "The initial weapon has an unsupported equipment category."
+		error = tr("The initial weapon has an unsupported equipment category.")
 		return false
 	for item_id in tables.buyable_equipment:
 		if item_id < 0 or item_id >= items.size() or int(items[item_id][1]) >= CARGO_CATEGORY:
-			error = "Invalid shop catalogue reference."
+			error = tr("Invalid shop catalogue reference.")
 			return false
 	for row in items:
 		if (
@@ -416,11 +417,11 @@ func validate_content() -> bool:
 			or int(row[5]) < 0
 			or int(row[6]) < int(row[5])
 		):
-			error = "Invalid equipment definition."
+			error = tr("Invalid equipment definition.")
 			return false
 	for row in ships:
 		if int(row[4]) <= 0 or int(row[5]) < 0 or int(row[6]) < 0:
-			error = "Invalid ship definition."
+			error = tr("Invalid ship definition.")
 			return false
 	for row in stations:
 		if (
@@ -428,7 +429,7 @@ func validate_content() -> bool:
 			or int(row[5]) > int(content.economy.cargo_technology_max)
 			or int(row[8]) not in [0, 1]
 		):
-			error = "Unsupported station services or technology level."
+			error = tr("Unsupported station services or technology level.")
 			return false
 	return true
 
@@ -1274,7 +1275,7 @@ func texture(name: String = "main_texture") -> Texture2D:
 
 
 func valid_materials() -> bool:
-	error = "Invalid imported mesh materials. Import the IPA again."
+	error = tr("Invalid imported mesh materials. Import the IPA again.")
 	var definitions: Variant = content.get("materials")
 	if not definitions is Dictionary or definitions.is_empty() or definitions.size() > 256:
 		return false
@@ -1313,9 +1314,9 @@ func valid_materials() -> bool:
 
 func valid_briefing_scene() -> bool:
 	if not preload("res://src/presentation/opening_choreography.gd").valid_data(content.get("briefing_scene",{}).get("opening")):
-		error = "Opening cinematic declarations are missing or invalid. Import the IPA again."
+		error = tr("Opening cinematic declarations are missing or invalid. Import the IPA again.")
 		return false
-	error = "Invalid imported briefing scene. Import the IPA again."
+	error = tr("Invalid imported briefing scene. Import the IPA again.")
 	var data: Variant = content.get("briefing_scene")
 	if data.opening.actor >= content.tables.actor_meshes.size(): return false
 	if (
@@ -1421,7 +1422,7 @@ func location_station_type(station_id: int) -> int:
 
 
 func valid_station_models() -> bool:
-	error = "Invalid imported station geometry. Import the IPA again."
+	error = tr("Invalid imported station geometry. Import the IPA again.")
 	var data: Variant = content.get("station_models")
 	if (
 		not data is Dictionary
@@ -1529,7 +1530,7 @@ func mesh(name: String) -> ArrayMesh:
 		return mesh_cache[name]
 	var path := "data/meshes/" + name + ".aem"
 	if not FileAccess.file_exists(root.path_join(path)):
-		error = "Missing model: " + name
+		error = tr("Missing model: %s") % name
 		return null
 	var result := reader.aem(read(path))
 	if result.is_empty():
@@ -1559,7 +1560,7 @@ func mesh(name: String) -> ArrayMesh:
 func model(name: String, desired_size: float = 0.0) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	if not model_materials.has(name):
-		error = "Missing source material for model: " + name
+		error = tr("Missing source material for model: %s") % name
 		return node
 	node.mesh = mesh(name)
 	if node.mesh == null:
@@ -1573,10 +1574,10 @@ func model(name: String, desired_size: float = 0.0) -> MeshInstance3D:
 
 
 func valid_ship_exhaust() -> bool:
-	error = "Invalid ship exhaust definitions. Import the IPA again."
+	error = tr("Invalid ship exhaust definitions. Import the IPA again.")
 	var definitions: Variant = content.get("ship_exhaust")
 	if not definitions is Dictionary:
-		error = "Missing ship exhaust definitions. Import the IPA again."
+		error = tr("Missing ship exhaust definitions. Import the IPA again.")
 		return false
 	for key in ["player", "actors"]:
 		var actors: Variant = definitions.get(key)
@@ -1726,7 +1727,7 @@ func load_radio_atlases() -> bool:
 			]
 		)
 	):
-		error = "Radio presentation data is missing. Import the IPA again."
+		error = tr("Radio presentation data is missing. Import the IPA again.")
 		return false
 	if (
 		not ui.portraits is Array
@@ -1736,11 +1737,11 @@ func load_radio_atlases() -> bool:
 		or not content_integer(ui.font_spacing)
 		or abs(ui.font_spacing) > 16
 	):
-		error = "Invalid radio atlas definitions."
+		error = tr("Invalid radio atlas definitions.")
 		return false
 	for field in ["line_ms", "lead_ms", "text_width"]:
 		if not content_integer(ui[field]) or ui[field] <= 0 or ui[field] > 10000:
-			error = "Invalid radio layout or timing."
+			error = tr("Invalid radio layout or timing.")
 			return false
 	for key in ui.textures:
 		var path: Variant = ui.textures[key]
@@ -1750,7 +1751,7 @@ func load_radio_atlases() -> bool:
 			or not path.ends_with(".aei")
 			or path.contains("..")
 		):
-			error = "Invalid UI texture path."
+			error = tr("Invalid UI texture path.")
 			return false
 		var atlas := reader.aei(read(path))
 		if atlas.is_empty():
@@ -1767,16 +1768,16 @@ func load_radio_atlases() -> bool:
 			or binding.region < 0
 			or not radio_atlases.has(str(int(binding.texture)))
 		):
-			error = "Invalid radio image association."
+			error = tr("Invalid radio image association.")
 			return false
 		var atlas: Dictionary = radio_atlases[str(int(binding.texture))]
 		var entries: Array = atlas.glyphs if binding == ui.font else atlas.regions
 		if int(binding.region) >= entries.size():
-			error = "Radio image or font lies outside its atlas."
+			error = tr("Radio image or font lies outside its atlas.")
 			return false
 	var glyphs := radio_glyphs()
 	if not glyphs.has(32) or not glyphs.has(63):
-		error = "Radio font is missing spacing or fallback glyphs."
+		error = tr("Radio font is missing spacing or fallback glyphs.")
 		return false
 	for binding in ui.portraits:
 		var region: Rect2i = radio_atlases[str(int(binding.texture))].regions[int(binding.region)]
@@ -1784,10 +1785,10 @@ func load_radio_atlases() -> bool:
 			ui.panel.corner.region
 		)]
 		if corner.size.y * 2 > region.size.y + ui.layout.height_padding:
-			error = "Dialogue corner exceeds the portrait-height panel."
+			error = tr("Dialogue corner exceeds the portrait-height panel.")
 			return false
 		if region.size.x <= 0 or region.size.y <= 0 or region.size.x >= ui.text_width:
-			error = "Radio portrait leaves no readable text column."
+			error = tr("Radio portrait leaves no readable text column.")
 			return false
 	for mission in content.missions:
 		if mission.has("fog"):
@@ -1795,11 +1796,11 @@ func load_radio_atlases() -> bool:
 				not radio_atlases.has(str(int(mission.fog.texture)))
 				or fog_texture(mission.fog) == null
 			):
-				error = "Nebula texture lies outside the supplied atlas."
+				error = tr("Nebula texture lies outside the supplied atlas.")
 				return false
 		for cue in mission.radio:
 			if int(cue.speaker) < 0 or int(cue.speaker) >= ui.portraits.size():
-				error = "Radio speaker lies outside the portrait table."
+				error = tr("Radio speaker lies outside the portrait table.")
 				return false
 	return true
 
@@ -1809,7 +1810,7 @@ func valid_radio_layout() -> bool:
 	var layout: Variant = ui.get("layout")
 	var panel: Variant = ui.get("panel")
 	if not layout is Dictionary or not panel is Dictionary or not panel.get("corner") is Dictionary:
-		error = "Missing supplied dialogue panel artwork or layout. Import the IPA again."
+		error = tr("Missing supplied dialogue panel artwork or layout. Import the IPA again.")
 		return false
 	for key in ["origin", "portrait", "text"]:
 		var point: Variant = layout.get(key)
@@ -1818,11 +1819,11 @@ func valid_radio_layout() -> bool:
 			or point.size() != 2
 			or not point.all(func(n): return content_integer(n) and n >= 0 and n < 480)
 		):
-			error = "Invalid radio panel coordinates."
+			error = tr("Invalid radio panel coordinates.")
 			return false
 	for key in ["width", "height_padding"]:
 		if not content_integer(layout.get(key)) or layout[key] <= 0 or layout[key] > 480:
-			error = "Invalid radio panel dimensions."
+			error = tr("Invalid radio panel dimensions.")
 			return false
 	if (
 		layout.origin[0] + layout.width > 480
@@ -1835,7 +1836,7 @@ func valid_radio_layout() -> bool:
 		or layout.portrait[1] < layout.origin[1]
 		or layout.portrait[1] >= 320
 	):
-		error = "Radio panel falls outside the source composition."
+		error = tr("Radio panel falls outside the source composition.")
 		return false
 	var binding: Dictionary = panel.corner
 	if (
@@ -1844,11 +1845,11 @@ func valid_radio_layout() -> bool:
 		or binding.region < 0
 		or not radio_atlases.has(str(int(binding.texture)))
 	):
-		error = "Invalid dialogue corner association."
+		error = tr("Invalid dialogue corner association.")
 		return false
 	var regions: Array = radio_atlases[str(int(binding.texture))].regions
 	if binding.region >= regions.size():
-		error = "Dialogue corner falls outside its atlas."
+		error = tr("Dialogue corner falls outside its atlas.")
 		return false
 	var corner: Rect2i = regions[int(binding.region)]
 	if (
@@ -1857,7 +1858,7 @@ func valid_radio_layout() -> bool:
 		or corner.size.x * 2 > layout.width
 		or corner.size.y * 2 > 320 - layout.origin[1]
 	):
-		error = "Dialogue corner does not fit its panel."
+		error = tr("Dialogue corner does not fit its panel.")
 		return false
 	for key in ["fill", "border"]:
 		var color: Variant = panel.get(key)
@@ -1866,7 +1867,7 @@ func valid_radio_layout() -> bool:
 			or color.size() != 4
 			or not color.all(func(n): return content_integer(n) and n >= 0 and n <= 255)
 		):
-			error = "Invalid supplied panel color."
+			error = tr("Invalid supplied panel color.")
 			return false
 	return true
 
@@ -1905,10 +1906,11 @@ func radio_glyph_width(code: int) -> float:
 func needs_scalable_text() -> bool:
 	# A language written in letters the imported glyph atlas lacks (Cyrillic,
 	# for example) cannot use it. A stray missing symbol falls back to "?".
+	# The engine's own text shares the screens, so its language counts too.
 	if scalable_text_cache < 0:
 		scalable_text_cache = 0
 		var glyphs := radio_glyphs()
-		for value in strings:
+		for value: String in Array(strings) + [EngineLanguage.catalog_text(EngineLanguage.current)]:
 			for index in value.length():
 				var code := value.unicode_at(index)
 				if glyphs.has(code) or code < 128:
@@ -2043,7 +2045,7 @@ func fog_texture(value: Dictionary) -> Texture2D:
 
 func valid_travel() -> bool:
 	if not preload("res://src/simulation/travel.gd").valid(content.get("travel"), self):
-		error = "Travel and faction rules are missing or invalid. Import the IPA again."
+		error = tr("Travel and faction rules are missing or invalid. Import the IPA again.")
 		return false
 	return true
 
@@ -2051,13 +2053,13 @@ func valid_travel() -> bool:
 func valid_map_ui() -> bool:
 	var data: Variant = content.get("map_ui")
 	if not data is Dictionary or not preload("res://src/presentation/galaxy_map.gd").valid_layout(data.get("layout")):
-		error = "Map layout declarations are missing or invalid. Import the IPA again."
+		error = tr("Map layout declarations are missing or invalid. Import the IPA again.")
 		return false
 	if (
 		not data is Dictionary
 		or not data.has_all(["images", "labels", "planets", "stations", "races", "grid"])
 	):
-		error = "Map artwork and destination data are missing. Import the IPA again."
+		error = tr("Map artwork and destination data are missing. Import the IPA again.")
 		return false
 	if (
 		not data.images is Dictionary
@@ -2067,7 +2069,7 @@ func valid_map_ui() -> bool:
 		or not data.races is Array
 		or not data.grid is Dictionary
 	):
-		error = "Invalid map presentation definitions."
+		error = tr("Invalid map presentation definitions.")
 		return false
 	if (
 		not data.images.has_all(
@@ -2106,7 +2108,7 @@ func valid_map_ui() -> bool:
 		or not data.stations.has_all(["primary_race", "primary", "secondary", "other", "races"])
 		or not data.stations.races is Dictionary
 	):
-		error = "Incomplete map presentation definitions."
+		error = tr("Incomplete map presentation definitions.")
 		return false
 	var icons: Variant = content.get("map_icons")
 	if (
@@ -2119,7 +2121,7 @@ func valid_map_ui() -> bool:
 		or icons.primary_race < 0
 		or icons.primary_race >= data.races.size()
 	):
-		error = "Map destination symbols are missing or invalid. Import the IPA again."
+		error = tr("Map destination symbols are missing or invalid. Import the IPA again.")
 		return false
 	var bindings: Array = (
 		icons.planets
@@ -2137,7 +2139,7 @@ func valid_map_ui() -> bool:
 			or not content_integer(binding.get("region"))
 			or not radio_atlases.has(str(int(binding.texture)))
 		):
-			error = "Invalid map atlas association."
+			error = tr("Invalid map atlas association.")
 			return false
 		var regions: Array = radio_atlases[str(int(binding.texture))].regions
 		if (
@@ -2146,15 +2148,15 @@ func valid_map_ui() -> bool:
 			or regions[int(binding.region)].size.x <= 0
 			or regions[int(binding.region)].size.y <= 0
 		):
-			error = "Map image lies outside its atlas."
+			error = tr("Map image lies outside its atlas.")
 			return false
 	for label_id in data.labels.values() + data.races:
 		if not content_integer(label_id) or label_id < 0 or label_id >= strings.size():
-			error = "Invalid map localization reference."
+			error = tr("Invalid map localization reference.")
 			return false
 	for key in ["system_columns", "quadrant_columns", "system_extent", "quadrant_extent"]:
 		if not content_number(data.grid.get(key)) or data.grid[key] <= 0 or data.grid[key] > 10000:
-			error = "Invalid galaxy coordinate definitions."
+			error = tr("Invalid galaxy coordinate definitions.")
 			return false
 	if (
 		not content_integer(data.grid.system_columns)
@@ -2166,7 +2168,7 @@ func valid_map_ui() -> bool:
 		or data.stations.primary_race < 0
 		or data.stations.primary_race >= data.races.size()
 	):
-		error = "Galaxy tables disagree with the imported map layout."
+		error = tr("Galaxy tables disagree with the imported map layout.")
 		return false
 	for index in stations.size():
 		var station := station_definition(index)
@@ -2175,7 +2177,7 @@ func valid_map_ui() -> bool:
 			or station.race >= data.races.size()
 			or (station.planet and (station.image < 0 or station.image >= data.planets.size()))
 		):
-			error = "Invalid destination preview association."
+			error = tr("Invalid destination preview association.")
 			return false
 	return true
 
@@ -2240,15 +2242,15 @@ func station_info(index: int, discovered: bool) -> Array:
 func valid_flight_ui() -> bool:
 	var ui: Variant = content.get("flight_ui")
 	if not ui is Dictionary or not ui.get("buttons") is Dictionary:
-		error = "Flight control artwork is missing. Import the IPA again."
+		error = tr("Flight control artwork is missing. Import the IPA again.")
 		return false
 	if not valid_tutorial_ui(ui.get("tutorial")):
-		error = "Invalid tutorial presentation. Import the IPA again."
+		error = tr("Invalid tutorial presentation. Import the IPA again.")
 		return false
 	for name in ["missiles", "weapon", "pause", "boost"]:
 		var button: Variant = ui.buttons.get(name)
 		if not button is Dictionary:
-			error = "Missing flight control artwork."
+			error = tr("Missing flight control artwork.")
 			return false
 		for state in ["normal", "pressed"]:
 			var binding: Variant = button.get(state)
@@ -2258,15 +2260,15 @@ func valid_flight_ui() -> bool:
 				or not content_integer(binding.get("region"))
 				or not radio_atlases.has(str(int(binding.texture)))
 			):
-				error = "Invalid flight control atlas association."
+				error = tr("Invalid flight control atlas association.")
 				return false
 			var atlas: Dictionary = radio_atlases[str(int(binding.texture))]
 			if binding.region < 0 or binding.region >= atlas.regions.size():
-				error = "Flight control image lies outside its atlas."
+				error = tr("Flight control image lies outside its atlas.")
 				return false
 			var region: Rect2i = atlas.regions[int(binding.region)]
 			if region.size.x <= 0 or region.size.y <= 0:
-				error = "Flight control image is empty."
+				error = tr("Flight control image is empty.")
 				return false
 	var artwork: Variant = ui.get("artwork")
 	if (
@@ -2274,7 +2276,7 @@ func valid_flight_ui() -> bool:
 		or not artwork.get("images") is Dictionary
 		or not artwork.get("layout") is Dictionary
 	):
-		error = "Missing flight HUD composition. Import the IPA again."
+		error = tr("Missing flight HUD composition. Import the IPA again.")
 		return false
 	for key in [
 		"fire_overlay",
@@ -2294,7 +2296,7 @@ func valid_flight_ui() -> bool:
 			or not content_integer(binding.get("region"))
 			or not radio_atlases.has(str(int(binding.texture)))
 		):
-			error = "Invalid HUD artwork association."
+			error = tr("Invalid HUD artwork association.")
 			return false
 		var regions: Array = radio_atlases[str(int(binding.texture))].regions
 		if (
@@ -2303,7 +2305,7 @@ func valid_flight_ui() -> bool:
 			or regions[int(binding.region)].size.x <= 0
 			or regions[int(binding.region)].size.y <= 0
 		):
-			error = "Missing HUD image in the supplied atlas."
+			error = tr("Missing HUD image in the supplied atlas.")
 			return false
 	for key in [
 		"pause_top",
@@ -2335,10 +2337,10 @@ func valid_flight_ui() -> bool:
 			or artwork.layout[key] <= 0
 			or artwork.layout[key] >= 320
 		):
-			error = "Invalid flight HUD margin."
+			error = tr("Invalid flight HUD margin.")
 			return false
 	if not artwork.get("colors") is Dictionary:
-		error = "Missing HUD colors."
+		error = tr("Missing HUD colors.")
 		return false
 	for key in ["hull", "shield"]:
 		if (
@@ -2346,18 +2348,18 @@ func valid_flight_ui() -> bool:
 			or artwork.colors[key] < 0
 			or artwork.colors[key] > 0xffffffff
 		):
-			error = "Invalid HUD color."
+			error = tr("Invalid HUD color.")
 			return false
 	if not valid_radar_ui(ui.get("radar")):
 		return false
 	if not preload("res://src/presentation/damage_feedback.gd").valid(ui.get("damage"), self):
-		error = "Invalid damage indicator artwork or timing. Import the IPA again."
+		error = tr("Invalid damage indicator artwork or timing. Import the IPA again.")
 		return false
 	return true
 
 
 func valid_radar_ui(value: Variant) -> bool:
-	error = "Invalid flight radar artwork. Import the IPA again."
+	error = tr("Invalid flight radar artwork. Import the IPA again.")
 	if not value is Dictionary or not value.get("images") is Dictionary:
 		return false
 	for key in [
@@ -2483,10 +2485,10 @@ func valid_tutorial_ui(config: Variant) -> bool:
 
 
 func valid_briefing_ui() -> bool:
-	error = "Invalid imported briefing presentation. Import the IPA again."
+	error = tr("Invalid imported briefing presentation. Import the IPA again.")
 	var ui: Variant = content.get("briefing_ui")
 	if not ui is Dictionary:
-		error = "Briefing presentation data is missing. Import the IPA again."
+		error = tr("Briefing presentation data is missing. Import the IPA again.")
 		return false
 	var audio: Variant = ui.get("audio")
 	if not audio is Dictionary or not content_integer(audio.get("voice_text_offset")):
@@ -2587,7 +2589,7 @@ func briefing_cue(chapter: int, page: int) -> Dictionary:
 
 
 func valid_sky() -> bool:
-	error = "Invalid imported sky declarations. Import the IPA again."
+	error = tr("Invalid imported sky declarations. Import the IPA again.")
 	var data: Variant = content.get("sky")
 	if not data is Dictionary:
 		return false
@@ -2669,7 +2671,7 @@ func valid_sky() -> bool:
 
 
 func valid_lighting() -> bool:
-	error = "Invalid imported scene lighting. Import the IPA again."
+	error = tr("Invalid imported scene lighting. Import the IPA again.")
 	var data: Variant = content.get("lighting")
 	if (
 		not data is Dictionary
@@ -2760,14 +2762,14 @@ func apply_lighting(material: ShaderMaterial) -> void:
 
 func valid_recovery() -> bool:
 	if not preload("res://src/simulation/recovery.gd").valid(content.get("recovery"), self):
-		error = "Cargo recovery data is missing or invalid. Import the IPA again."
+		error = tr("Cargo recovery data is missing or invalid. Import the IPA again.")
 		return false
 	return true
 
 
 func valid_survival() -> bool:
 	if not preload("res://src/content/survival_content.gd").valid(content.get("survival"), self):
-		error = "Survival data or artwork is missing or invalid. Import the IPA again."
+		error = tr("Survival data or artwork is missing or invalid. Import the IPA again.")
 		return false
 	return true
 
@@ -2776,13 +2778,13 @@ func valid_player_armament() -> bool:
 	if not preload("res://src/simulation/player_armament.gd").valid(
 		content.get("player_armament"), self
 	):
-		error = "Invalid imported player weapon declarations. Import the IPA again."
+		error = tr("Invalid imported player weapon declarations. Import the IPA again.")
 		return false
 	return true
 
 
 func valid_weapon_sounds() -> bool:
-	error = "Invalid imported weapon sounds. Import the IPA again."
+	error = tr("Invalid imported weapon sounds. Import the IPA again.")
 	var rules: Variant = content.get("weapon_sounds")
 	if (
 		not rules is Dictionary
@@ -2808,7 +2810,7 @@ func valid_weapon_sounds() -> bool:
 		if int(items[index][1]) >= SHIELD_CATEGORY:
 			continue
 		if not content.get("sound_bank", {}).has(str(weapon_sound(index))):
-			error = "Missing imported weapon sound. Import the IPA again."
+			error = tr("Missing imported weapon sound. Import the IPA again.")
 			return false
 	error = ""
 	return true
@@ -2831,7 +2833,7 @@ func weapon_sound(index: int) -> int:
 
 
 func valid_radio_audio() -> bool:
-	error = "Invalid imported radio sounds. Import the IPA again."
+	error = tr("Invalid imported radio sounds. Import the IPA again.")
 	var audio: Variant = content.radio_ui.get("audio")
 	if (
 		not audio is Dictionary
@@ -2854,21 +2856,21 @@ func valid_projectile_trails() -> bool:
 	if not preload("res://src/presentation/projectile_trail.gd").valid(
 		content.get("projectile_trails"), self
 	):
-		error = "Invalid imported projectile trail presentation. Import the IPA again."
+		error = tr("Invalid imported projectile trail presentation. Import the IPA again.")
 		return false
 	return true
 
 
 func valid_lens_flare() -> bool:
 	if not preload("res://src/presentation/lens_flare.gd").valid(content.get("lens_flare"), self):
-		error = "Invalid imported lens flare presentation. Import the IPA again."
+		error = tr("Invalid imported lens flare presentation. Import the IPA again.")
 		return false
 	return true
 
 
 func valid_player_hit() -> bool:
 	if not preload("res://src/presentation/player_hit.gd").valid(self):
-		error = "Invalid player hit effects or sound resources. Import the IPA again."
+		error = tr("Invalid player hit effects or sound resources. Import the IPA again.")
 		return false
 	return true
 
@@ -2895,7 +2897,7 @@ func valid_actor_destruction() -> bool:
 	if not preload("res://src/presentation/explosion.gd").valid(
 		content.get("actor_destruction"), self
 	):
-		error = "Invalid imported actor destruction effects. Import the IPA again."
+		error = tr("Invalid imported actor destruction effects. Import the IPA again.")
 		return false
 	return true
 
@@ -2904,20 +2906,20 @@ func valid_fighter_motion() -> bool:
 	if not preload("res://src/simulation/fighter_motion.gd").valid_data(
 		content.get("fighter_motion")
 	):
-		error = "Unsupported fighter current-speed declarations."
+		error = tr("Unsupported fighter current-speed declarations.")
 		return false
 	return true
 
 
 func valid_npc_exhaust() -> bool:
 	if not preload("res://src/presentation/npc_exhaust.gd").valid_data(content.get("npc_exhaust")):
-		error = "Unsupported NPC burner declarations. Import the IPA again."
+		error = tr("Unsupported NPC burner declarations. Import the IPA again.")
 		return false
 	return true
 
 
 func valid_title_ui() -> bool:
-	error = "Invalid imported title presentation. Import the IPA again."
+	error = tr("Invalid imported title presentation. Import the IPA again.")
 	var data: Variant = content.get("title_ui")
 	if not preload("res://src/presentation/title_menu.gd").valid_data(data):
 		return false
@@ -2938,7 +2940,7 @@ func valid_title_ui() -> bool:
 
 
 func valid_station_ui() -> bool:
-	error = "Invalid imported station presentation. Import the IPA again."
+	error = tr("Invalid imported station presentation. Import the IPA again.")
 	var data: Variant = content.get("station_ui")
 	if not preload("res://src/presentation/station_menu.gd").valid_data(data):
 		return false
@@ -2964,7 +2966,7 @@ func valid_station_ui() -> bool:
 
 
 func valid_hangar_ui() -> bool:
-	error = "Invalid imported Hangar presentation. Import the IPA again."
+	error = tr("Invalid imported Hangar presentation. Import the IPA again.")
 	var data: Variant = content.get("hangar_ui")
 	if not preload("res://src/presentation/hangar_catalogue.gd").valid_data(data): return false
 	var hints: Variant = data.get("hints")
@@ -3012,7 +3014,7 @@ func valid_hangar_ui() -> bool:
 
 
 func valid_defeat_ui() -> bool:
-	error = "Invalid imported defeat presentation. Import the IPA again."
+	error = tr("Invalid imported defeat presentation. Import the IPA again.")
 	var data: Variant = content.get("defeat_ui")
 	if not data is Dictionary or not data.get("labels") is Dictionary:
 		return false
@@ -3031,7 +3033,7 @@ func valid_defeat_ui() -> bool:
 
 
 func valid_pause_ui() -> bool:
-	error = "Invalid imported pause presentation. Import the IPA again."
+	error = tr("Invalid imported pause presentation. Import the IPA again.")
 	var data: Variant = content.get("pause_ui")
 	if not data is Dictionary or not data.get("labels") is Dictionary or data.get("rows") != 4:
 		return false
@@ -3045,7 +3047,7 @@ func valid_pause_ui() -> bool:
 
 
 func valid_options_ui() -> bool:
-	error = "Invalid imported options presentation. Import the IPA again."
+	error = tr("Invalid imported options presentation. Import the IPA again.")
 	var data: Variant = content.get("options_ui")
 	if not data is Dictionary or not data.get("labels") is Dictionary or not data.get("images") is Dictionary:
 		return false
@@ -3069,7 +3071,7 @@ func valid_options_ui() -> bool:
 
 
 func valid_board_ui() -> bool:
-	error = "Invalid imported mission-board presentation. Import the IPA again."
+	error = tr("Invalid imported mission-board presentation. Import the IPA again.")
 	var data: Variant = content.get("board_ui")
 	if not preload("res://src/presentation/mission_board.gd").valid_data(data):
 		return false
@@ -3086,9 +3088,9 @@ func valid_board_ui() -> bool:
 
 func valid_combat_presentation() -> bool:
 	if not preload("res://src/presentation/flight_music.gd").valid(content.get("flight_music"), content.sound_bank):
-		error = "Invalid radar music definitions. Import the IPA again."
+		error = tr("Invalid radar music definitions. Import the IPA again.")
 		return false
-	error = "Invalid NPC projectile definitions. Import the IPA again."
+	error = tr("Invalid NPC projectile definitions. Import the IPA again.")
 	var models: Variant = content.get("npc_projectiles")
 	if not models is Dictionary: return false
 	for key in ["124", "128", "136", "140", "144"]:

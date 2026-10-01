@@ -136,7 +136,7 @@ func populate() -> void:
 			button.button_pressed = index == selected
 			button.set_meta("offer", index)
 			button.tooltip_text = title_for(offer) + " · " + reward_for(offer)
-			if offer.reward_unit == "per_target": button.tooltip_text += " per target"
+			if offer.reward_unit == "per_target": button.tooltip_text += tr(" per target")
 			for state in ["normal", "hover", "pressed", "focus"]:
 				var skin := StyleBoxFlat.new()
 				skin.bg_color = color(library.content.station_ui.fill) if state == "normal" else Color(.12, .42, .44, .85)
@@ -184,8 +184,8 @@ func update_actions() -> void:
 	if selected < 0: return
 	var paid: bool = session.contract_paid(references[selected])
 	accept.disabled = paid or not Contracts.supported(library, offers[selected])
-	accept.text = "Completed" if paid else library.text(int(data.labels.accept))
-	accept.tooltip_text = "Encounter in development" if not Contracts.supported(library, offers[selected]) else ""
+	accept.text = tr("Completed") if paid else library.text(int(data.labels.accept))
+	accept.tooltip_text = tr("Encounter in development") if not Contracts.supported(library, offers[selected]) else ""
 
 
 func handle_action(action: String) -> void:

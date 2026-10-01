@@ -116,5 +116,5 @@ func _draw() -> void:
 		draw_texture(icon, Vector2(panel_position.x + 10, y))
 	write(str(amount) + data.suffix, Rect2(Vector2(panel_position.x + width * .5, y), Vector2(width * .5 - 8, 20)), HORIZONTAL_ALIGNMENT_RIGHT)
 	# The native total makes a multi-unit sale reviewable before applying it.
-	write("%d credits" % (amount * int(entry.price)), Rect2(Vector2(panel_position.x + 8, y + 23), Vector2(width - 16, 20)), HORIZONTAL_ALIGNMENT_CENTER)
+	write(tr("%d credits") % (amount * int(entry.price)), Rect2(Vector2(panel_position.x + 8, y + 23), Vector2(width - 16, 20)), HORIZONTAL_ALIGNMENT_CENTER)
 	draw_set_transform(Vector2.ZERO)

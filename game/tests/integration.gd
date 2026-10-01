@@ -22387,7 +22387,7 @@ func check_options_menu(source: PackedByteArray, lib) -> void:
 	app.show_options()
 	var panel = app.options_panel
 	check(root.gui_get_focus_owner() == panel.buttons[0], "Options initially focuses its first category rather than Back")
-	check(panel != null and not app.page.visible and panel.entries.map(func(row): return row.action) == ["controls", "audio", "display", "language"], "Installed content exposes original menu categories and language selection")
+	check(panel != null and not app.page.visible and panel.entries.map(func(row): return row.action) == ["controls", "audio", "display", "languages"], "Installed content exposes original menu categories and language selection")
 	panel.handle_action("audio")
 	check(panel.sliders.size() == 2 and panel.buttons.all(func(button): return button.focus_mode == Control.FOCUS_NONE), "Audio rows expose keyboard-focusable sliders without duplicate buttons")
 	panel.sliders.music_volume.value = 35

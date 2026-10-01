@@ -72,7 +72,7 @@ func paint(canvas: Node2D) -> void:
 				center + Vector2(direction * 3, -9), center + Vector2(direction * 7, -9),
 				center + Vector2(direction * 7, 1), center + Vector2(direction * 3, 1)
 			]), color, 1.6, true)
-		HudSkin.text(canvas, "DOCK", center + Vector2(0, 10), 6.5, factor, color, true)
+		HudSkin.text(canvas, tr("DOCK"), center + Vector2(0, 10), 6.5, factor, color, true)
 	elif kind == "pause":
 		for x in [-5.5, 1.0]:
 			canvas.draw_rect(Rect2(center + Vector2(x, -7), Vector2(4.5, 14)), Color("6bc9e1"))

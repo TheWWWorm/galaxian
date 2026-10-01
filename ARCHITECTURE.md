@@ -1443,3 +1443,26 @@ preserving prior files in a timestamped backup and replacing the directory only
 after all writes succeed. Transfers require identical IPA content identities and
 contain only pilot/survival data. Native dialogs and browser upload/download share
 this validation path. Campaign29 and Survival11 save formats are unchanged.
+
+### Interface language
+
+Text the remake writes itself (menus, settings, notices, errors) is marked with
+`tr("...")`, with the English text as the key; static code uses
+`EngineLanguage.translate()`. Catalogs live in `game/src/locale/<code>.gd` for 14
+languages besides English. Game text, mission dialogue and catalogue names never
+pass through these catalogs: they come from the selected IPA language file.
+
+`presentation/engine_language.gd` resolves the interface language. Auto follows the
+game language (`gb` is English, and a fan translation stored under another file
+name is recognised from its text), then the system locale, then English. When the
+system and game languages differ, the first start asks which to use, phrased in
+both. Chinese, Japanese and Korean draw with bundled Noto Sans CJK subsets set as
+font fallbacks; on mobile, catalog text the imported glyph atlas cannot write
+selects the scalable font automatically.
+
+After changing marked text, `python3 tools/engine_text.py check` lists missing,
+stale or broken entries; `engine_text.py write <code> <file.json>` merges
+translations. After the Chinese, Japanese or Korean catalogs change, regenerate the
+glyph subsets with `engine_text.py fonts <NotoSansCJK-Regular.ttc>
+<harfbuzz-subset.wasm>` (Node). `tests/engine_language.gd` covers resolution,
+catalog loading and CJK glyph coverage without imported content.

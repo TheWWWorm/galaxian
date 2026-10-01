@@ -12,7 +12,7 @@ Captured in the remake using locally imported game assets.
 ![Galaxy on Fire remake — cinematic screenshot 2](https://i.imgur.com/ZGKAZZU.jpeg)
 ![Galaxy on Fire remake — cinematic screenshot 3](https://i.imgur.com/qJOEQEk.jpeg)
 
-## Version 1.0
+## Version 1.1
 
 Play the thirteen-mission linear campaign, then explore freely. **Skip campaign ·
 Explore** enters exploration directly without completion rewards. Trade, outfit
@@ -35,7 +35,8 @@ The remake adds keyboard/mouse and controller controls, variable throttle, time
 acceleration, persistent checkpoints and a compact desktop interface with scalable
 text. Touch controls are available on mobile and can be switched in Options.
 Original icons, portraits and interface artwork come from your game file.
-Map travel uses a short departure/arrival fade.
+Map travel uses a short departure/arrival fade. The remake's own menus and messages
+are available in 15 languages and follow your game's language automatically.
 
 This is an independently designed reimplementation, not emulation or a line-by-line
 port. Original program code is never executed or cached. Exact legacy animation,
@@ -109,12 +110,18 @@ autopilot. Hostiles, damage or approaching a destination return it to 1×. Focus
 loss and active-controller disconnect pause the game.
 
 Options includes sensitivity, inversion, aim assistance, touch controls, linked
-primary firing and separate music/effects volume. Select **Options → Language**
-to cycle through the languages included in your IPA; your choice is saved.
-An IPA carrying an added translation, such as a community Russian `ru.lang`, is
-offered too.
-Remake-specific settings and help currently use English. Inversion reverses pitch
-on the Y axis for mouse, controller and touch. Arrow keys keep their direction.
+primary firing and separate music/effects volume. Select **Options → Languages →
+Language** to cycle through the languages included in your IPA; your choice is
+saved. An IPA carrying an added translation, such as a community Russian `ru.lang`,
+is offered too. The remake's own menus, settings and messages follow the game's
+language when the remake has it, and otherwise the system language. When your system
+language differs from the game's, the first start asks which to use; **Options →
+Languages → Interface language** changes it later. The interface text is available
+in English, Russian, Ukrainian, German, French, Spanish, Brazilian Portuguese,
+Italian, Polish, Turkish, Indonesian, Vietnamese, Simplified Chinese, Japanese and
+Korean. Story, ship and item names always come from your IPA.
+
+Inversion reverses pitch on the Y axis for mouse, controller and touch. Arrow keys keep their direction.
 The previous remake flight controls are the default. Enable **Options → Controls →
 Original flight controls** for reconstructed iPhone-style ship agility, inertia and
 banking. This mode uses imported steering declarations, with adapted mouse input

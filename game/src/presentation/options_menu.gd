@@ -1,5 +1,6 @@
 extends "res://src/presentation/title_menu.gd"
 ## Original menu art and option widgets; native settings belong to the owner.
+const EngineLanguage = preload("res://src/presentation/engine_language.gd")
 signal setting_changed(key: String, value: Variant)
 signal back_requested
 var values := {}
@@ -28,22 +29,25 @@ func setup(source, settings: Dictionary, help: String) -> void:
 
 
 func label_for(key: String) -> String:
+	if key == "languages":
+		return label_for("language")
 	if options.labels.has(key):
 		return library.text(int(options.labels[key]))
 	if key == "targeting_reticle":
 		return library.text(int(library.content.flight_ui.radar.lead.option_text))
 	return {
-		"aim_assist": "Aim assistance", "linked_fire": "Fire linked weapons",
-		"touch": "Show touch controls", "sensitivity": "Mouse sensitivity",
-		"language": "Language", "fullscreen": "Fullscreen", "aspect_ratio": "Aspect ratio",
-		"frame_rate": "Frame rate limit", "text_font": "Text font",
-		"flight_overlays": "Show flight text overlays", "extra_flight_buttons": "Show extra flight buttons",
-		"flight_hud": "Flight display",
-		"original_flight_controls": "Original flight controls",
-		"weapons": "Weapon controls",
-		"steering": "Steering settings",
-		"motion": "Motion steering", "motion_steering": "Steer by tilting",
-		"motion_sensitivity": "Tilt sensitivity", "calibrate_motion": "Center motion controls",
+		"aim_assist": tr("Aim assistance"), "linked_fire": tr("Fire linked weapons"),
+		"touch": tr("Show touch controls"), "sensitivity": tr("Mouse sensitivity"),
+		"language": tr("Language"), "fullscreen": tr("Fullscreen"), "aspect_ratio": tr("Aspect ratio"),
+		"frame_rate": tr("Frame rate limit"), "text_font": tr("Text font"),
+		"flight_overlays": tr("Show flight text overlays"), "extra_flight_buttons": tr("Show extra flight buttons"),
+		"flight_hud": tr("Flight display"),
+		"original_flight_controls": tr("Original flight controls"),
+		"weapons": tr("Weapon controls"),
+		"steering": tr("Steering settings"),
+		"motion": tr("Motion steering"), "motion_steering": tr("Steer by tilting"),
+		"motion_sensitivity": tr("Tilt sensitivity"), "calibrate_motion": tr("Center motion controls"),
+		"engine_language": tr("Interface language"),
 		"help": library.text(int(data.labels.help))
 	}.get(key, key)
 
@@ -52,7 +56,8 @@ func show_section(page: String, focus_key: String = "") -> void:
 	entries.clear()
 	sliders.clear()
 	var keys: Array = {
-		"options": ["controls", "audio", "display", "language"],
+		"options": ["controls", "audio", "display", "languages"],
+		"languages": ["language", "engine_language"],
 		"controls": ["original_flight_controls", "steering", "weapons", "help"],
 		"steering": ["invert", "sensitivity", "motion"],
 		"motion": ["motion_steering", "motion_sensitivity", "calibrate_motion"],
@@ -71,14 +76,16 @@ func show_section(page: String, focus_key: String = "") -> void:
 		var caption := label_for(caption_key)
 		if key == "language":
 			caption += ": " + library.language_name(library.language_code)
+		if key == "engine_language":
+			caption += ": " + EngineLanguage.choice_name(str(values.get(key, "")), str(values.get("content_language", "")))
 		if key == "aspect_ratio":
 			var ratio: String = values.get(key, "auto")
-			caption += ": " + ("Auto" if ratio == "auto" else ratio)
+			caption += ": " + (tr("Auto") if ratio == "auto" else ratio)
 		if key == "frame_rate":
 			caption += ": " + preload("res://src/presentation/display_settings.gd").frame_rate_caption(get_window(), values.get(key, "auto"))
 		if key == "text_font":
 			var mode := preload("res://src/presentation/bitmap_font.gd").text_font_value(values.get(key))
-			caption += ": " + {"auto": "Auto", "original": "Original", "scalable": "Scalable"}[mode]
+			caption += ": " + {"auto": tr("Auto"), "original": tr("Original"), "scalable": tr("Scalable")}[mode]
 		entries.append({"action": key, "text": caption})
 	present(page, entries, library.text(int(library.content.briefing_ui.labels.back)), "back", help_text if page == "help" else "")
 	# Original sliders are taller than ordinary rows. Native extra settings must
@@ -212,7 +219,7 @@ func update_slider_caption(label: Label, caption: String, key: String, amount: f
 func handle_action(action: String) -> void:
 	if action == "back":
 		back()
-	elif action in ["controls", "audio", "display", "flight_hud", "steering", "motion", "weapons", "help"]:
+	elif action in ["controls", "audio", "display", "languages", "flight_hud", "steering", "motion", "weapons", "help"]:
 		show_section(action)
 	elif action == "calibrate_motion":
 		setting_changed.emit(action, true)
@@ -220,6 +227,8 @@ func handle_action(action: String) -> void:
 		var languages: Array[String] = library.available_languages()
 		if not languages.is_empty():
 			setting_changed.emit("language", languages[(languages.find(library.language_code) + 1) % languages.size()])
+	elif action == "engine_language":
+		setting_changed.emit(action, EngineLanguage.next_choice(str(values.get(action, ""))))
 	elif action == "aspect_ratio":
 		var ratios: Array = preload("res://src/presentation/display_settings.gd").RATIOS.keys()
 		values[action] = ratios[(ratios.find(values.get(action, "auto")) + 1) % ratios.size()]
