@@ -174,7 +174,6 @@ static func actions(library, pilot, entry: Dictionary) -> Array:
 	if entry.is_empty():
 		return []
 	var room: bool = pilot.cargo_used() < pilot.cargo_capacity()
-	var shop: bool = library.station_definition(pilot.station_id).shop
 	match entry.source:
 		"shop":
 			var allowed: bool = pilot.credits >= entry.price and room
@@ -199,10 +198,10 @@ static func actions(library, pilot, entry: Dictionary) -> Array:
 					"text": EngineLanguage.translate("Install"),
 					"enabled": pilot.loadout.supports(pilot.ship_id, int(entry.id))
 				},
-				{"action": "sell", "text": EngineLanguage.translate("Sell"), "enabled": shop}
+				{"action": "sell", "text": EngineLanguage.translate("Sell"), "enabled": true}
 			]
 		"cargo":
-			return [{"action": "sell_cargo", "text": library.text(int(library.content.hangar_ui.quantity.labels.sell)), "enabled": shop}]
+			return [{"action": "sell_cargo", "text": library.text(int(library.content.hangar_ui.quantity.labels.sell)), "enabled": true}]
 	return []
 
 

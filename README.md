@@ -12,11 +12,13 @@ Captured in the remake using locally imported game assets.
 ![Galaxy on Fire remake — cinematic screenshot 2](https://i.imgur.com/ZGKAZZU.jpeg)
 ![Galaxy on Fire remake — cinematic screenshot 3](https://i.imgur.com/qJOEQEk.jpeg)
 
-## Version 1.1
+## Version 1.2
 
 Play the thirteen-mission linear campaign, then explore freely. **Skip campaign ·
 Explore** enters exploration directly without completion rewards. Trade, outfit
 ships, accept contracts or play Survival with a separate score archive.
+The in-game **Reference** is an illustrated wiki of your own game that grows with
+your campaign.
 
 **Swarm** is a remake-authored arcade mode. It opens on a handful of fighters and
 grows into a crowd that closes from every side, with surges after the fifth
@@ -83,6 +85,24 @@ Browser saves and imported content belong to that browser profile and site origi
 clearing site data removes them, and private browsing may not preserve them.
 Mobile browsers can use touch controls, but physical mobile-browser performance
 has not been verified. Native desktop builds are preferable on low-memory devices.
+
+## Reference
+
+**[Open the reference at galaxian.wwworm.com/wiki](https://galaxian.wwworm.com/wiki/)**:
+an illustrated wiki of the whole game in fifteen languages. It covers the full
+story, so it contains spoilers. The online edition is built from the English
+iPhone release and shows its names, descriptions, dialogue and art.
+
+In the game, **Reference** opens the same guide built from your own game. Find it under
+**Menu** at any station, or under Help on the title screen and in Pause. It covers
+every planet and station, the galaxy map, ships (with a turning 3D model),
+weapons, goods, contract types, races, the story chapters and characters, ranks,
+loyalty, the game modes and how to play. Names, descriptions, portraits and
+dialogue come from your imported game; nothing is bundled. Story pages grow with
+your campaign: chapters you have not reached and characters you have not met stay
+hidden, and a chapter's outcome only appears after you finish it. The reference
+follows the interface language. Desktop builds can also save it as a web page
+you can open in a browser.
 
 ## Controls
 

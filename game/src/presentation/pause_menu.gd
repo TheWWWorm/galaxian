@@ -55,7 +55,7 @@ func show_root() -> void:
 func handle_action(action: String) -> void:
 	if is_instance_valid(overlay): return
 	match action:
-		"help": present("help", [], library.text(int(library.content.briefing_ui.labels.back)), "back", help_text)
+		"help": present("help", [{"text": tr("Reference"), "action": "reference"}], library.text(int(library.content.briefing_ui.labels.back)), "back", help_text)
 		"back": back()
 		"abandon":
 			if survival:
@@ -64,7 +64,7 @@ func handle_action(action: String) -> void:
 			if can_save: selected.emit(action)
 		"load":
 			if can_save and not survival: selected.emit(action)
-		"resume", "options", "menu", "action_freeze", "touch_layout": selected.emit(action)
+		"resume", "options", "menu", "action_freeze", "touch_layout", "reference": selected.emit(action)
 
 
 func back() -> void:

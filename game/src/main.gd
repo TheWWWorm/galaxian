@@ -57,6 +57,10 @@ var options_panel
 var action_freeze_panel
 var touch_layout_panel
 var pause_panel
+var reference_panel
+## The screen and its panel that opened the reference, restored on closing.
+var reference_return := ""
+var reference_cover: Control
 var defeat_panel
 var defeat_notice := false
 var defeated_session
@@ -334,6 +338,11 @@ func clear_page(keep_menu_scene: bool = false) -> void:
 		defeat_panel.queue_free()
 	defeat_panel = null
 	briefing_audio.stop_voice()
+	if is_instance_valid(reference_panel):
+		reference_panel.hide()
+		reference_panel.queue_free()
+	reference_panel = null
+	reference_cover = null
 	if is_instance_valid(pause_panel):
 		pause_panel.hide()
 		pause_panel.set_process(false)
@@ -556,6 +565,7 @@ func show_title_menu(section: String) -> void:
 			body = tr("Move campaign, exploration and survival saves between devices or the web and native apps. Import the same game IPA on both devices first.")
 		"help":
 			body = controls_help()
+			entries = [{"text": tr("Reference"), "action": "reference"}]
 		"language_question":
 			var choices := language_question_choices()
 			body = language_question_text(choices[0]) + "\n\n" + language_question_text(choices[1])
@@ -585,6 +595,8 @@ func title_action(action: String) -> void:
 			import_saves()
 		"options":
 			show_options()
+		"reference":
+			show_reference()
 		"campaign":
 			request_start(false)
 		"explore":
@@ -657,6 +669,8 @@ func station_action(action: String) -> void:
 			save_game()
 		"options":
 			show_options()
+		"reference":
+			show_reference()
 		"skip":
 			request_skip()
 		"title":
@@ -667,7 +681,8 @@ func station_action(action: String) -> void:
 func show_station_menu() -> void:
 	var entries := [
 		{"text": library.text(int(library.content.title_ui.labels.options)), "action": "options"},
-		{"text": tr("Save pilot"), "action": "save"}
+		{"text": tr("Save pilot"), "action": "save"},
+		{"text": tr("Reference"), "action": "reference"}
 	]
 	if session.campaign_state == "active":
 		entries.append({"text": tr("Skip campaign · Explore"), "action": "skip"})
@@ -1738,11 +1753,55 @@ func pause_action(action: String) -> void:
 		"action_freeze": show_action_freeze()
 		"touch_layout": show_touch_layout()
 		"options": show_options()
+		"reference": show_reference()
 		"save": save_game()
 		"menu":
 			if save_game(false): show_title()
 		"abandon": abandon_survival()
 		"load": show_load_menu()
+
+
+## The furthest the story may go in the reference: the pilot's own chapter,
+## or from the title the furthest chapter any campaign or exploration save
+## has reached.
+func story_limit() -> int:
+	if session != null and not transient_preview and session.slot in ["campaign", "free"]:
+		return int(session.chapter) + 1
+	var furthest := 1
+	for slot in ["campaign", "free"]:
+		var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(save_path(slot)))
+		if saved is Dictionary and saved.get("chapter") is float:
+			furthest = maxi(furthest, int(saved.chapter) + 1)
+	return furthest
+
+
+func show_reference() -> void:
+	if is_instance_valid(reference_panel) or not ready_content:
+		return
+	reference_return = screen
+	reference_cover = {"title": title_panel, "pause": pause_panel, "dock": station_panel}.get(screen)
+	if is_instance_valid(reference_cover):
+		reference_cover.hide()
+	screen = "reference"
+	reference_panel = preload("res://src/wiki/wiki_panel.gd").new()
+	reference_panel.configure(library, story_limit())
+	ui.add_child(reference_panel)
+	reference_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	reference_panel.closed.connect(close_reference)
+
+
+func close_reference() -> void:
+	if is_instance_valid(reference_panel):
+		reference_panel.hide()
+		reference_panel.queue_free()
+	reference_panel = null
+	screen = reference_return
+	if is_instance_valid(reference_cover):
+		reference_cover.show()
+		var focus: Control = reference_cover.find_next_valid_focus()
+		if focus != null:
+			focus.grab_focus()
+	reference_cover = null
 
 
 func resume_flight() -> void:
@@ -1763,6 +1822,9 @@ func focus_lost() -> void:
 func navigate_back() -> void:
 	if busy:
 		cancel_import()
+		return
+	if screen == "reference":
+		close_reference()
 		return
 	if confirmation.visible:
 		confirmation.hide()
@@ -1835,7 +1897,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		event is InputEventJoypadButton
 		and event.pressed
 		and event.button_index == JOY_BUTTON_B
-		and screen in ["title", "dock", "market", "contracts", "map", "options", "pause", "defeat"]
+		and screen in ["title", "dock", "market", "contracts", "map", "options", "pause", "defeat", "reference"]
 	):
 		navigate_back()
 	if event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START:

@@ -1466,3 +1466,38 @@ translations. After the Chinese, Japanese or Korean catalogs change, regenerate 
 glyph subsets with `engine_text.py fonts <NotoSansCJK-Regular.ttc>
 <harfbuzz-subset.wasm>` (Node). `tests/engine_language.gd` covers resolution,
 catalog loading and CJK glyph coverage without imported content.
+
+### Reference
+
+`src/wiki/` holds the in-game reference, adapted from the maintained DEEP remake.
+`WikiCatalog` builds every page from the selected IPA: names, descriptions,
+portraits and dialogue come from its language files and catalogues, and figures
+(prices by technology level, travel costs, ranks, shop rules) come from the same
+code the simulation uses, such as `Market`. Keys are language-independent tokens
+(`station/12`, `ship/3`, `chapter/5`). Pages are a small HTML subset that
+`WikiHtml` turns into RichTextLabel markup and the web export writes unchanged.
+
+The reference's own writing lives in `src/wiki/prose/<code>.gd`, one file per
+interface language with English as the source. A block is `[from, heading, text,
+list item]`. Text names things only through `[[key]]` or `[[key|words]]` tokens,
+so a translated game's own names appear in it, and imported text never does.
+Translations must keep English's blocks, chapter gates, list flags and token keys.
+For languages the game lacks, prose quotes the English menu labels the game shows.
+
+Story pages stop at a chapter limit: the pilot's chapter in a campaign or
+exploration session, or the furthest saved chapter from the title screen.
+Chapters not yet offered and characters not yet met stay out of every page,
+including search and links. A chapter's outcome and radio log appear only once it
+is finished. `WikiMedia` shows a page's picture: the ship's model in its own small
+world, the imported art scaled without filtering, or `WikiChart`'s galaxy map.
+
+On desktop, `WikiExport` writes the reference as a folder with an index page,
+a script and style, one content file per language, and images from the imported
+art. `WikiSnapshots` renders each ship for it, and a headless export keeps the
+hangar pictures instead. `tools/export_wiki.gd` runs the same export from the
+command line. The output contains imported content and is private to the player,
+like the import cache.
+
+`tests/wiki_check.gd CONTENT` checks every language's catalog: no broken links,
+every category populated, nothing beyond the chapter limit, and prose structure
+matching English. `engine_text.py` includes the prose in the CJK font subsets.

@@ -4,7 +4,10 @@
 Abyssal compatibility engine (the maintained DEEP remake). The save isolation,
 local import and device-neutral controls follow the same architecture.
 `worker.js` and `tools/prepare_web_host.py` adapt its numbered-asset streaming
-approach for Cloudflare hosting, also under Apache-2.0.
+approach for Cloudflare hosting, also under Apache-2.0. The reference reader and
+its web export (`game/src/wiki/wiki_panel.gd`, `wiki_html.gd`, `wiki_prose.gd`
+and `wiki_export.gd`) are adapted from the same project's reference, also under
+Apache-2.0.
 
 AEM/AEI file-layout research was consulted at https://github.com/BaalNetbek/AEMesh.
 No implementation from that repository is bundled.

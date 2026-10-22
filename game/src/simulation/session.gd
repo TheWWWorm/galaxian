@@ -771,7 +771,6 @@ func buy_offer(index: int) -> bool:
 func sell_equipment(index: int) -> bool:
 	if (
 		not docked
-		or not library.station_definition(station_id).shop
 		or index < 0
 		or index >= loadout.hold.size()
 	):
@@ -785,7 +784,7 @@ func sell_equipment(index: int) -> bool:
 
 func sell_cargo(item: int, amount: int = 1) -> bool:
 	var key := str(item)
-	if not docked or not library.station_definition(station_id).shop or amount <= 0 or amount > int(cargo.get(key, 0)):
+	if not docked or amount <= 0 or amount > int(cargo.get(key, 0)):
 		error = tr("The selected cargo quantity is unavailable.")
 		return false
 	var price := Market.cargo_price(library, item, station_id)

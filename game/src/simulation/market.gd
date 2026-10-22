@@ -2,14 +2,14 @@ extends RefCounted
 ## Native stock generation uses imported eligibility rules and catalogue weights.
 ## Weighted sampling avoids the original rejection loops while preserving their
 ## accepted distribution. Stock belongs to the save, never to a presentation node.
+## Like the source, every station has stock; the station menu alone decides
+## whether its hangar opens (shop, campaign or the high-credit exception).
 
 
 static func generate(
 	library, station_id: int, chapter: int, campaign: bool, seed_value: int
 ) -> Array:
 	var station: Dictionary = library.station_definition(station_id)
-	if not station.shop:
-		return []
 	var rules: Dictionary = library.content.economy
 	var random := RandomNumberGenerator.new()
 	random.seed = seed_value
@@ -66,11 +66,7 @@ static func generate(
 			if choice < 0:
 				break
 			var id: int = ships[choice].id
-			var base := int(library.ships[id][6])
-			var price := (
-				base - int(base * float(station.technology) / float(rules.ship_technology_divisor))
-			)
-			add_offer(offers, "ship", id, price)
+			add_offer(offers, "ship", id, ship_price_at(library, id, int(station.technology)))
 	return offers
 
 
@@ -97,15 +93,25 @@ static func weighted_index(candidates: Array, random: RandomNumberGenerator) -> 
 
 
 static func cargo_price(library, item_id: int, station_id: int) -> int:
+	return cargo_price_at(library, item_id, int(library.station_definition(station_id).technology))
+
+
+## The price of a cargo unit at a station of the given technology level.
+static func cargo_price_at(library, item_id: int, technology: int) -> int:
 	var item: Dictionary = library.equipment(item_id)
-	var station: Dictionary = library.station_definition(station_id)
 	var rules: Dictionary = library.content.economy
 	var fraction := .5
 	if item.technology == 0:
-		fraction = float(station.technology) / float(rules.cargo_technology_divisor)
+		fraction = float(technology) / float(rules.cargo_technology_divisor)
 	elif item.technology == 2:
 		fraction = (
-			(float(rules.cargo_technology_max) - float(station.technology))
+			(float(rules.cargo_technology_max) - float(technology))
 			/ float(rules.cargo_technology_divisor)
 		)
 	return int(item.min_price) + int((int(item.max_price) - int(item.min_price)) * fraction)
+
+
+## A ship's shop price at a station of the given technology level.
+static func ship_price_at(library, ship_id: int, technology: int) -> int:
+	var base := int(library.ships[ship_id][6])
+	return base - int(base * float(technology) / float(library.content.economy.ship_technology_divisor))

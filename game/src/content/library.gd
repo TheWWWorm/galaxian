@@ -2201,16 +2201,24 @@ func galaxy_position(index: int) -> Vector2:
 
 
 func station_preview(index: int) -> Texture2D:
+	return ui_image(station_preview_binding(index))
+
+
+func station_preview_binding(index: int) -> Dictionary:
 	var station := station_definition(index)
 	var data: Dictionary = content.map_ui
 	if station.planet:
-		return ui_image(data.planets[station.image])
+		return data.planets[station.image]
 	if station.race == data.stations.primary_race:
-		return ui_image(data.stations.primary if station.image == 0 else data.stations.secondary)
-	return ui_image(data.stations.races.get(str(station.race), data.stations.other))
+		return data.stations.primary if station.image == 0 else data.stations.secondary
+	return data.stations.races.get(str(station.race), data.stations.other)
 
 
 func station_map_icon(index: int) -> Texture2D:
+	return ui_image(station_map_icon_binding(index))
+
+
+func station_map_icon_binding(index: int) -> Dictionary:
 	var station := station_definition(index)
 	var icons: Dictionary = content.map_icons
 	if station.planet:
@@ -2219,10 +2227,10 @@ func station_map_icon(index: int) -> Texture2D:
 		for previous in range(int(station.system) * per_system, index):
 			if int(stations[previous][1]) == 1:
 				ordinal += 1
-		return ui_image(icons.planets[ordinal % icons.planets.size()])
+		return icons.planets[ordinal % icons.planets.size()]
 	if station.race == icons.primary_race:
-		return ui_image(icons.primary if station.image == 0 else icons.secondary)
-	return ui_image(icons.races.get(str(station.race), icons.other))
+		return icons.primary if station.image == 0 else icons.secondary
+	return icons.races.get(str(station.race), icons.other)
 
 
 func station_info(index: int, discovered: bool) -> Array:

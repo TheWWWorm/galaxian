@@ -2220,8 +2220,6 @@ func check_economy(lib) -> void:
 	for station_id in lib.stations.size():
 		var station: Dictionary = lib.station_definition(station_id)
 		var offers: Array = pilot.Market.generate(lib, station_id, 0, false, station_id + 123)
-		if not station.shop and not offers.is_empty():
-			all_stock_valid = false
 		var ship_units := 0
 		var item_units := 0
 		for offer in offers:
@@ -2246,11 +2244,11 @@ func check_economy(lib) -> void:
 					or int(lib.items[int(offer.id)][2]) > station.quadrant
 				):
 					all_stock_valid = false
-		if station.shop:
-			if item_units < 1 or item_units > 4 or ship_units > (1 if station.race == 1 else 3):
-				all_stock_valid = false
-			if station.race == 1 and alien_station < 0:
-				alien_station = station_id
+		# The source builds stock at every station; only hangar access needs a shop.
+		if item_units < 1 or item_units > 4 or ship_units > (1 if station.race == 1 else 3):
+			all_stock_valid = false
+		if station.shop and station.race == 1 and alien_station < 0:
+			alien_station = station_id
 	check(
 		all_stock_valid,
 		"All station markets obey source stock counts, quadrants and faction restrictions"
@@ -20419,7 +20417,11 @@ func check_station_menu(source: PackedByteArray, lib) -> void:
 		"Engine options overlay prevents background tab clicks"
 	)
 	var choices: Array = panel.overlay.get_children().filter(func(node): return node is Button)
-	choices[2].pressed.emit()
+	check(
+		choices.any(func(choice): return choice.text == TranslationServer.translate("Reference")),
+		"Station menu offers the reference"
+	)
+	choices.filter(func(choice): return choice.text == TranslationServer.translate("Skip campaign · Explore"))[0].pressed.emit()
 	check(app.actions.back() == "skip", "Skip retains existing confirmation workflow")
 	app.navigate_back()
 	check(
@@ -20470,6 +20472,24 @@ func check_station_menu(source: PackedByteArray, lib) -> void:
 	check(not panel.tab_enabled(1), "No-shop hangar stays unavailable at source credit threshold")
 	pilot.credits += 1
 	check(panel.tab_enabled(1), "Source high-credit exception enables hangar above threshold")
+	# Player report (20 October 2026): the exception opened an empty hangar that
+	# refused sales. The source stocks and trades at every station it opens.
+	var rich_funds: int = pilot.credits
+	var rich_price: int = pilot.Market.cargo_price(lib, 15, pilot.station_id)
+	pilot.cargo = {"15": 1}
+	pilot.loadout.hold.append({"id": 0, "value": 100})
+	var rich_actions: Array = preload("res://src/presentation/hangar_catalogue.gd").actions(
+		lib, pilot, {"source": "cargo", "kind": "cargo", "id": 15}
+	)
+	check(
+		not pilot.market_offers().is_empty()
+		and rich_actions.size() == 1 and rich_actions[0].enabled
+		and pilot.sell_cargo(15) and pilot.credits == rich_funds + rich_price
+		and pilot.sell_equipment(pilot.loadout.hold.size() - 1)
+		and pilot.credits == rich_funds + rich_price + 100,
+		"High-credit exception stocks the no-shop hangar and accepts sales"
+	)
+	pilot.credits = rich_funds
 	for extent in [Vector2i(1920, 1080), Vector2i(720, 1280)]:
 		viewport.size = extent
 		await process_frame
