@@ -12,6 +12,10 @@ Captured in the remake using locally imported game assets.
 ![Galaxy on Fire remake — cinematic screenshot 2](https://i.imgur.com/ZGKAZZU.jpeg)
 ![Galaxy on Fire remake — cinematic screenshot 3](https://i.imgur.com/qJOEQEk.jpeg)
 
+## Reference wiki
+
+**[Open the Galaxy on Fire reference at galaxian.wwworm.com/wiki](https://galaxian.wwworm.com/wiki/)** - an illustrated wiki of the whole game: the thirteen story chapters, characters, races, all five hundred planets and stations on the galaxy map, ships as 3D pictures, weapons and shields, goods, contracts, ranks, loyalty, the game modes and guides to playing, in fifteen languages. It covers the full story, so it contains spoilers; the in-game [reference](#reference) shows only what your campaign has reached. The online edition is built from the English iPhone release and shows its names, descriptions, dialogue and art.
+
 ## Version 1.2
 
 Play the thirteen-mission linear campaign, then explore freely. **Skip campaign ·
@@ -88,12 +92,9 @@ has not been verified. Native desktop builds are preferable on low-memory device
 
 ## Reference
 
-**[Open the reference at galaxian.wwworm.com/wiki](https://galaxian.wwworm.com/wiki/)**:
-an illustrated wiki of the whole game in fifteen languages. It covers the full
-story, so it contains spoilers. The online edition is built from the English
-iPhone release and shows its names, descriptions, dialogue and art.
-
-In the game, **Reference** opens the same guide built from your own game. Find it under
+**Reference** is an illustrated encyclopedia of your own imported game; a full,
+spoiler-complete edition is online at
+[galaxian.wwworm.com/wiki](https://galaxian.wwworm.com/wiki/). Find it under
 **Menu** at any station, or under Help on the title screen and in Pause. It covers
 every planet and station, the galaxy map, ships (with a turning 3D model),
 weapons, goods, contract types, races, the story chapters and characters, ranks,
